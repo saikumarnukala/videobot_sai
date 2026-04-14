@@ -61,26 +61,39 @@ class VideoBuilder:
             with open(subtitle_path, 'r') as f:
                 subs = json.load(f)
                 
-            for i, sub in enumerate(subs):
-                word = sub.get('text', '').strip()
-                if not word:
-                    continue
-                start = sub['start']
-                end = sub['end']
-                
-                dur = (end - start) + 0.1 
-                
-                text_clip = TextClip(
-                    text=word.upper(),
-                    font=FONT_PATH,
-                    font_size=90,
-                    color="white",
-                    stroke_color="black",
-                    stroke_width=4,
-                    method="caption",
-                    size=(900, None)
-                ).with_position(("center", "center")).with_start(start).with_duration(dur)
-                
+            # Filter empty entries then group into 2-word blocks
+            subs = [s for s in subs if s.get('text', '').strip()]
+            groups = []
+            i = 0
+            while i < len(subs):
+                if i + 1 < len(subs):
+                    grp_text = subs[i]['text'].strip() + ' ' + subs[i+1]['text'].strip()
+                    grp_start = subs[i]['start']
+                    grp_end = subs[i+1]['end'] + 0.05
+                    i += 2
+                else:
+                    grp_text = subs[i]['text'].strip()
+                    grp_start = subs[i]['start']
+                    grp_end = subs[i]['end'] + 0.05
+                    i += 1
+                groups.append({'text': grp_text, 'start': grp_start, 'end': grp_end})
+
+            for grp in groups:
+                text_clip = (
+                    TextClip(
+                        text=grp['text'].upper(),
+                        font=FONT_PATH,
+                        font_size=62,
+                        color="white",
+                        stroke_color="black",
+                        stroke_width=4,
+                        method="caption",
+                        size=(800, None),
+                    )
+                    .with_position(("center", 0.10), relative=True)
+                    .with_start(grp['start'])
+                    .with_duration(grp['end'] - grp['start'])
+                )
                 final_clips.append(text_clip)
 
         # 4. Subscribe CTA overlay (last 3 seconds)
