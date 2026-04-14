@@ -22,16 +22,18 @@ name: Daily Faceless Video Bot
 
 on:
   schedule:
-    - cron: '0 7 * * *'    # Morning   – 7:00 AM UTC  → morning topics
-    - cron: '0 11 * * *'   # News      – 11:00 AM UTC → breaking news
-    - cron: '0 13 * * *'   # Afternoon – 1:00 PM UTC  → afternoon topics
-    - cron: '0 19 * * *'   # Evening   – 7:00 PM UTC  → evening topics
+    - cron: '0 6 * * *'    # News #1    – 6:00 AM UTC  → top breaking story
+    - cron: '0 8 * * *'    # Topic #1   – 8:00 AM UTC  → morning topic
+    - cron: '0 11 * * *'   # News #2    – 11:00 AM UTC → second breaking story
+    - cron: '0 13 * * *'   # Topic #2   – 1:00 PM UTC  → afternoon topic
+    - cron: '0 16 * * *'   # News #3    – 4:00 PM UTC  → third breaking story
+    - cron: '0 19 * * *'   # Topic #3   – 7:00 PM UTC  → evening topic
 
   # Manual trigger: optionally override slot and/or topic
   workflow_dispatch:
     inputs:
       slot:
-        description: 'Time slot (morning / afternoon / evening / news)'
+        description: 'Time slot (morning / afternoon / evening / news1 / news2 / news3)'
         required: false
         default: ''
       topic:
@@ -100,24 +102,49 @@ jobs:
             # Manual dispatch with an explicit topic
             echo "topic=$OVERRIDE_TOPIC" >> "$GITHUB_OUTPUT"
             echo "use_news=false" >> "$GITHUB_OUTPUT"
+            echo "news_index=0" >> "$GITHUB_OUTPUT"
+          elif [ "$OVERRIDE_SLOT" = "news1" ]; then
+            echo "topic=" >> "$GITHUB_OUTPUT"
+            echo "use_news=true" >> "$GITHUB_OUTPUT"
+            echo "news_index=0" >> "$GITHUB_OUTPUT"
+          elif [ "$OVERRIDE_SLOT" = "news2" ]; then
+            echo "topic=" >> "$GITHUB_OUTPUT"
+            echo "use_news=true" >> "$GITHUB_OUTPUT"
+            echo "news_index=1" >> "$GITHUB_OUTPUT"
+          elif [ "$OVERRIDE_SLOT" = "news3" ]; then
+            echo "topic=" >> "$GITHUB_OUTPUT"
+            echo "use_news=true" >> "$GITHUB_OUTPUT"
+            echo "news_index=2" >> "$GITHUB_OUTPUT"
           elif [ "$OVERRIDE_SLOT" = "news" ]; then
             echo "topic=" >> "$GITHUB_OUTPUT"
             echo "use_news=true" >> "$GITHUB_OUTPUT"
+            echo "news_index=0" >> "$GITHUB_OUTPUT"
           elif [ -n "$OVERRIDE_SLOT" ]; then
-            # Manual dispatch with a specific slot
+            # Manual dispatch with a specific topic slot
             TOPIC=$(python select_topic.py --slot "$OVERRIDE_SLOT")
             echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
             echo "use_news=false" >> "$GITHUB_OUTPUT"
+            echo "news_index=0" >> "$GITHUB_OUTPUT"
           else
-            # Scheduled run – detect if breaking news hour (11 AM UTC)
+            # Scheduled run – detect slot by hour
             HOUR=$(date -u +%H)
-            if [ "$HOUR" = "11" ]; then
+            if [ "$HOUR" = "06" ]; then
               echo "topic=" >> "$GITHUB_OUTPUT"
               echo "use_news=true" >> "$GITHUB_OUTPUT"
+              echo "news_index=0" >> "$GITHUB_OUTPUT"
+            elif [ "$HOUR" = "11" ]; then
+              echo "topic=" >> "$GITHUB_OUTPUT"
+              echo "use_news=true" >> "$GITHUB_OUTPUT"
+              echo "news_index=1" >> "$GITHUB_OUTPUT"
+            elif [ "$HOUR" = "16" ]; then
+              echo "topic=" >> "$GITHUB_OUTPUT"
+              echo "use_news=true" >> "$GITHUB_OUTPUT"
+              echo "news_index=2" >> "$GITHUB_OUTPUT"
             else
               TOPIC=$(python select_topic.py)
               echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
               echo "use_news=false" >> "$GITHUB_OUTPUT"
+              echo "news_index=0" >> "$GITHUB_OUTPUT"
             fi
           fi
 
@@ -135,7 +162,7 @@ jobs:
           GROQ_MODEL:         ${{ secrets.GROQ_MODEL || 'llama-3.3-70b-versatile' }}
         run: |
           if [ "${{ steps.topic_select.outputs.use_news }}" = "true" ]; then
-            python main.py --news
+            python main.py --news --news-index ${{ steps.topic_select.outputs.news_index }}
           else
             python main.py --topic "${{ steps.topic_select.outputs.topic }}"
           fi

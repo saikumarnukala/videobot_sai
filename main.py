@@ -18,6 +18,8 @@ def run_pipeline():
     parser = argparse.ArgumentParser()
     parser.add_argument('--topic', type=str, help='Override the topic from .env')
     parser.add_argument('--news', action='store_true', help='Fetch a live breaking news topic')
+    parser.add_argument('--news-index', type=int, default=0,
+                        help='Which news story to use (0=top, 1=second, 2=third)')
     args = parser.parse_args()
     
     # 1. Setup & Config
@@ -25,7 +27,7 @@ def run_pipeline():
     if args.topic:
         topic = args.topic
     elif args.news:
-        topic = NewsFetcher().get_breaking_topic()
+        topic = NewsFetcher().get_breaking_topic(index=args.news_index)
     else:
         topic = os.getenv("VIDEO_TOPIC", "interesting facts about space")
     target_length = int(os.getenv("VIDEO_LENGTH_SECONDS", "45"))

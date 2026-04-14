@@ -1,5 +1,5 @@
 """
-Fetches a trending/breaking news headline from free RSS feeds.
+Fetches trending/breaking news headlines from free RSS feeds.
 No API key required. Updates in real time.
 """
 import random
@@ -8,7 +8,7 @@ import feedparser
 
 
 class NewsFetcher:
-    """Fetch the current top breaking news headline for use as a video topic."""
+    """Fetch the current top breaking news headlines for use as video topics."""
 
     FEEDS = [
         "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en",
@@ -24,34 +24,51 @@ class NewsFetcher:
         re.IGNORECASE,
     )
 
-    def get_breaking_topic(self) -> str:
+    def get_top_stories(self, count: int = 3) -> list:
         """
-        Return a video-ready topic string based on today's top news.
-        Falls back gracefully if all feeds fail.
+        Return up to `count` unique video-ready topic strings from today's top news.
+        Stories are deduplicated and returned in feed order (most prominent first).
+        Falls back gracefully if feeds fail.
         """
+        seen = set()
+        candidates = []
+
         for feed_url in self.FEEDS:
+            if len(candidates) >= count * 3:  # collect a healthy pool
+                break
             try:
                 feed = feedparser.parse(feed_url)
-                entries = feed.get("entries", [])
-
-                candidates = []
-                for e in entries[:20]:
+                for e in feed.get("entries", [])[:20]:
                     title = getattr(e, "title", "").strip()
-                    # Must be a real story: long enough and not a skip pattern
                     if len(title) > 25 and not self._SKIP_PATTERNS.search(title):
-                        # Remove source attribution: "Story title - BBC News"
                         clean = re.split(r"\s[-|]\s", title)[0].strip()
-                        if len(clean) > 20:
+                        # Deduplicate by first 6 words (handles minor phrasing diffs)
+                        key = " ".join(clean.lower().split()[:6])
+                        if len(clean) > 20 and key not in seen:
+                            seen.add(key)
                             candidates.append(clean)
-
-                if candidates:
-                    headline = random.choice(candidates[:5])
-                    print(f"[News] Breaking story: {headline}")
-                    return f"breaking news: {headline}"
-
             except Exception as exc:
                 print(f"[News] Feed {feed_url} failed: {exc}. Trying next…")
                 continue
 
-        # Fallback — Gemini will expand this into a generic current-events script
-        return "biggest breaking news story happening right now in the world"
+        if not candidates:
+            # Fallback — Gemini/Groq will expand this into a generic current-events script
+            return [f"breaking news: biggest story happening right now in the world #{i+1}"
+                    for i in range(count)]
+
+        # Return up to `count` stories, cycling if we don't have enough
+        result = []
+        for i in range(count):
+            story = candidates[i % len(candidates)]
+            topic = f"breaking news: {story}"
+            result.append(topic)
+            print(f"[News] Story #{i+1}: {story}")
+        return result
+
+    def get_breaking_topic(self, index: int = 0) -> str:
+        """
+        Return a single topic string. index 0/1/2 picks different stories
+        so parallel cron runs don't duplicate content.
+        """
+        stories = self.get_top_stories(count=max(index + 1, 3))
+        return stories[index % len(stories)]
