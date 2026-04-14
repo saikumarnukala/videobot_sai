@@ -58,12 +58,18 @@ class ScriptGenerator:
         1. Start with a massive hook to grab attention in the first 3 seconds.
         2. Keep sentences extremely short and punchy.
         3. Do NOT include any stage directions like [Hook]. ONLY the spoken words.
-        4. You must ALSO generate exactly 3 chronological, visually distinct search keywords matching the script's scenes. We will use these to download background stock videos.
+        4. You must ALSO generate exactly 3 background video search keywords.
+           These will be searched on Pexels stock video — so they MUST be generic, visual,
+           and physically filmable concepts (NOT political figures, flags, maps, or branded content).
+           Good examples: "ocean waves crashing", "city skyline night", "busy stock market traders",
+           "military ships at sea", "government building exterior", "crowd protest street",
+           "hands shaking deal", "news anchor speaking", "courtroom interior", "fire explosion".
+           Match the MOOD and THEME of the script, not the specific names or places.
 
         OUTPUT FORMAT: You must output ONLY a valid JSON object matching this exact structure:
         {{
             "script": "The actual full text to be spoken...",
-            "keywords": ["mountain climbing", "dark skies abstract", "sunrise motivation"]
+            "keywords": ["busy stock market traders", "military ships at sea", "government building exterior"]
         }}
         """
 
