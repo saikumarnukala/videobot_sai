@@ -23,6 +23,7 @@ name: Daily Faceless Video Bot
 on:
   schedule:
     - cron: '0 7 * * *'    # Morning   – 7:00 AM UTC  → morning topics
+    - cron: '0 11 * * *'   # News      – 11:00 AM UTC → breaking news
     - cron: '0 13 * * *'   # Afternoon – 1:00 PM UTC  → afternoon topics
     - cron: '0 19 * * *'   # Evening   – 7:00 PM UTC  → evening topics
 
@@ -30,7 +31,7 @@ on:
   workflow_dispatch:
     inputs:
       slot:
-        description: 'Time slot (morning / afternoon / evening)'
+        description: 'Time slot (morning / afternoon / evening / news)'
         required: false
         default: ''
       topic:
@@ -86,14 +87,26 @@ jobs:
           if [ -n "$OVERRIDE_TOPIC" ]; then
             # Manual dispatch with an explicit topic
             echo "topic=$OVERRIDE_TOPIC" >> "$GITHUB_OUTPUT"
+            echo "use_news=false" >> "$GITHUB_OUTPUT"
+          elif [ "$OVERRIDE_SLOT" = "news" ]; then
+            echo "topic=" >> "$GITHUB_OUTPUT"
+            echo "use_news=true" >> "$GITHUB_OUTPUT"
           elif [ -n "$OVERRIDE_SLOT" ]; then
             # Manual dispatch with a specific slot
             TOPIC=$(python select_topic.py --slot "$OVERRIDE_SLOT")
             echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
+            echo "use_news=false" >> "$GITHUB_OUTPUT"
           else
-            # Scheduled run – auto-detect slot from UTC hour
-            TOPIC=$(python select_topic.py)
-            echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
+            # Scheduled run – detect if breaking news hour (11 AM UTC)
+            HOUR=$(date -u +%H)
+            if [ "$HOUR" = "11" ]; then
+              echo "topic=" >> "$GITHUB_OUTPUT"
+              echo "use_news=true" >> "$GITHUB_OUTPUT"
+            else
+              TOPIC=$(python select_topic.py)
+              echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
+              echo "use_news=false" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
       # ── 7. Run the full pipeline ──────────────────────────────────────
@@ -106,7 +119,11 @@ jobs:
           VIDEO_LENGTH_SECONDS: "55"
           YOUTUBE_PRIVACY:    ${{ secrets.YOUTUBE_PRIVACY || 'public' }}
         run: |
-          python main.py --topic "${{ steps.topic_select.outputs.topic }}"
+          if [ "${{ steps.topic_select.outputs.use_news }}" = "true" ]; then
+            python main.py --news
+          else
+            python main.py --topic "${{ steps.topic_select.outputs.topic }}"
+          fi
 
       # ── 8. Clean up (always runs, even on failure) ────────────────────
       - name: Clean up temp files

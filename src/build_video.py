@@ -83,7 +83,24 @@ class VideoBuilder:
                 
                 final_clips.append(text_clip)
 
-        # Composite video and text
+        # 4. Subscribe CTA overlay (last 3 seconds)
+        cta_start = max(0, audio_duration - 3.0)
+        cta_clip = (
+            TextClip(
+                text="⬇ SUBSCRIBE FOR MORE ⬇",
+                font=FONT_PATH,
+                font_size=55,
+                color="yellow",
+                stroke_color="black",
+                stroke_width=3,
+                method="caption",
+                size=(900, None),
+            )
+            .with_position(("center", 0.82), relative=True)
+            .with_start(cta_start)
+            .with_duration(3.0)
+        )
+        final_clips.append(cta_clip)
         composite_video = CompositeVideoClip(final_clips)
             
         # Apply the final mixed audio

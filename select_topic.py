@@ -46,7 +46,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Select a topic for the current time slot.")
     parser.add_argument(
         "--slot",
-        choices=["morning", "afternoon", "evening"],
+        choices=["morning", "afternoon", "evening", "news"],
         default=None,
         help="Force a specific slot. Auto-detects from UTC hour if omitted.",
     )
