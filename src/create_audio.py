@@ -49,12 +49,19 @@ class AudioGenerator:
                 await asyncio.sleep(2)
 
     def generate_audio_and_subs(self, text, output_file="temp_audio.mp3", subtitle_file="temp_subs.json"):
-        # Auto-switch to ElevenLabs (voice clone) when API key is configured
+        # Priority 1 – ElevenLabs paid voice clone (best quality)
         if os.getenv("ELEVENLABS_API_KEY"):
             from src.elevenlabs_audio import ElevenLabsAudioGenerator
             gen = ElevenLabsAudioGenerator()
             return gen.generate_audio_and_subs(text, output_file, subtitle_file)
 
+        # Priority 2 – Coqui XTTS v2 FREE voice clone (runs locally / on Actions)
+        if os.getenv("COQUI_VOICE_SAMPLE"):
+            from src.coqui_audio import CoquiAudioGenerator
+            gen = CoquiAudioGenerator()
+            return gen.generate_audio_and_subs(text, output_file, subtitle_file)
+
+        # Priority 3 – Edge TTS fallback (free, no clone, but very natural)
         asyncio.run(self._generate_audio_async(text, output_file, subtitle_file))
         if os.path.exists(output_file) and os.path.exists(subtitle_file):
             print(f"Audio and Subs successfully generated!")

@@ -77,6 +77,18 @@ jobs:
           printf '%s' "$CLIENT_SECRETS" > client_secrets.json
           printf '%s' "$TOKEN_JSON" > token.json
 
+      # ── 5b. Restore voice sample (optional – for Coqui free voice clone) ─
+      # To use: encode your WAV as base64 → store as VOICE_SAMPLE_B64 secret
+      #   PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes("my_voice.wav")) | clip
+      - name: Restore voice sample
+        if: ${{ secrets.VOICE_SAMPLE_B64 != '' }}
+        env:
+          VOICE_B64: ${{ secrets.VOICE_SAMPLE_B64 }}
+        run: |
+          mkdir -p assets
+          printf '%s' "$VOICE_B64" | base64 -d > assets/my_voice.wav
+          echo "COQUI_VOICE_SAMPLE=assets/my_voice.wav" >> $GITHUB_ENV
+
       # ── 6. Choose topic ───────────────────────────────────────────────
       - name: Select topic for this run
         id: topic_select
