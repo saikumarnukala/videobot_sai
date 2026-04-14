@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 from dotenv import load_dotenv
 
 # Import our custom modules
@@ -13,9 +14,13 @@ from src.music_fetcher import MusicFetcher
 def run_pipeline():
     print("=== FACELESS VIDEO BOT PIPELINE STARTED (V2) ===")
     
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--topic', type=str, help='Override the topic from .env')
+    args = parser.parse_args()
+    
     # 1. Setup & Config
     load_dotenv()
-    topic = os.getenv("VIDEO_TOPIC", "interesting facts about space")
+    topic = args.topic if args.topic else os.getenv("VIDEO_TOPIC", "interesting facts about space")
     target_length = int(os.getenv("VIDEO_LENGTH_SECONDS", "45"))
     upload_enabled = os.getenv("UPLOAD_TO_YOUTUBE", "False").lower() in ("true", "1", "yes")
     

@@ -1,0 +1,111 @@
+# ============================================================
+#  FACELESS VIDEO BOT – Daily GitHub Actions Automation
+# ============================================================
+#
+#  Runs 3 times per day and posts a YouTube Short automatically.
+#
+#  REQUIRED GitHub Secrets (Settings → Secrets → Actions):
+#  ─────────────────────────────────────────────────────────
+#  GEMINI_API_KEY               – Google Gemini API key
+#  PEXELS_API_KEY               – Pexels API key
+#  JAMENDO_CLIENT_ID            – Jamendo Client ID
+#  YOUTUBE_CLIENT_SECRETS_JSON  – Full contents of client_secrets.json
+#  YOUTUBE_TOKEN_JSON           – Full contents of token.json
+#                                 (run locally first to generate it)
+#
+#  OPTIONAL GitHub Secrets:
+#  YOUTUBE_PRIVACY              – "public" | "unlisted" | "private"
+#                                 (defaults to "public")
+# ============================================================
+
+name: Daily Faceless Video Bot
+
+on:
+  schedule:
+    - cron: '0 7 * * *'    # Morning   – 7:00 AM UTC  → morning topics
+    - cron: '0 13 * * *'   # Afternoon – 1:00 PM UTC  → afternoon topics
+    - cron: '0 19 * * *'   # Evening   – 7:00 PM UTC  → evening topics
+
+  # Manual trigger: optionally override slot and/or topic
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: 'Time slot (morning / afternoon / evening)'
+        required: false
+        default: ''
+      topic:
+        description: 'Specific topic override (leave blank to auto-select)'
+        required: false
+        default: ''
+
+jobs:
+  generate-and-upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45   # Generous timeout for video rendering
+
+    steps:
+      # ── 1. Source code ────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Python environment ─────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      # ── 3. System dependencies ────────────────────────────────────────
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+
+      # ── 4. Python packages ────────────────────────────────────────────
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      # ── 5. Restore YouTube OAuth credentials from secrets ─────────────
+      - name: Restore YouTube credentials
+        run: |
+          echo '${{ secrets.YOUTUBE_CLIENT_SECRETS_JSON }}' > client_secrets.json
+          echo '${{ secrets.YOUTUBE_TOKEN_JSON }}' > token.json
+
+      # ── 6. Choose topic ───────────────────────────────────────────────
+      - name: Select topic for this run
+        id: topic_select
+        run: |
+          OVERRIDE_TOPIC="${{ github.event.inputs.topic }}"
+          OVERRIDE_SLOT="${{ github.event.inputs.slot }}"
+
+          if [ -n "$OVERRIDE_TOPIC" ]; then
+            # Manual dispatch with an explicit topic
+            echo "topic=$OVERRIDE_TOPIC" >> "$GITHUB_OUTPUT"
+          elif [ -n "$OVERRIDE_SLOT" ]; then
+            # Manual dispatch with a specific slot
+            TOPIC=$(python select_topic.py --slot "$OVERRIDE_SLOT")
+            echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
+          else
+            # Scheduled run – auto-detect slot from UTC hour
+            TOPIC=$(python select_topic.py)
+            echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── 7. Run the full pipeline ──────────────────────────────────────
+      - name: Generate video and upload to YouTube
+        env:
+          GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY:     ${{ secrets.PEXELS_API_KEY }}
+          JAMENDO_CLIENT_ID:  ${{ secrets.JAMENDO_CLIENT_ID }}
+          UPLOAD_TO_YOUTUBE:  "true"
+          VIDEO_LENGTH_SECONDS: "55"
+          YOUTUBE_PRIVACY:    ${{ secrets.YOUTUBE_PRIVACY || 'public' }}
+        run: |
+          python main.py --topic "${{ steps.topic_select.outputs.topic }}"
+
+      # ── 8. Clean up (always runs, even on failure) ────────────────────
+      - name: Clean up temp files
+        if: always()
+        run: |
+          rm -f temp_audio.mp3 temp_subs.json bg_music.mp3 final_short.mp4
+          rm -f temp_bg_*.mp4 token.json client_secrets.json

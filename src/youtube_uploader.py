@@ -41,7 +41,9 @@ class YouTubeUploader:
         return googleapiclient.discovery.build(
             self.api_service_name, self.api_version, credentials=self.credentials)
 
-    def upload_short(self, file_path, title, description, category_id="22", privacy_status="private"):
+    def upload_short(self, file_path, title, description, category_id="22", privacy_status=None):
+        if privacy_status is None:
+            privacy_status = os.getenv("YOUTUBE_PRIVACY", "public")
         youtube = self.authenticate()
         
         print(f"Uploading {file_path} to YouTube Shorts...")
