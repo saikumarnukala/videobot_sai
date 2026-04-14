@@ -1,11 +1,33 @@
 import os
 import json
+import math
 from pathlib import Path
 from moviepy import VideoFileClip, AudioFileClip, CompositeAudioClip, vfx, afx, TextClip, CompositeVideoClip, concatenate_videoclips
 
 # Resolve font path: use bundled font so it works on Linux (GitHub Actions) and Windows
 _ASSETS_DIR = Path(__file__).parent.parent / "assets"
 FONT_PATH = str(_ASSETS_DIR / "impact.ttf")
+
+# YouTube Shorts target resolution (9:16 portrait)
+TARGET_W, TARGET_H = 1080, 1920
+
+
+def _resize_to_portrait(clip):
+    """Crop-scale any clip to exactly 1080×1920 regardless of source resolution."""
+    scale = max(TARGET_W / clip.w, TARGET_H / clip.h)
+    clip = clip.resized(scale)
+    x1 = (clip.w - TARGET_W) / 2
+    y1 = (clip.h - TARGET_H) / 2
+    return clip.cropped(x1=x1, y1=y1, width=TARGET_W, height=TARGET_H)
+
+
+def _loop_to_duration(clip, duration):
+    """Reliably loop a clip to the required duration (vfx.Loop is unreliable in moviepy v2)."""
+    if clip.duration >= duration:
+        return clip.subclipped(0, duration)
+    n = math.ceil(duration / clip.duration)
+    return concatenate_videoclips([clip] * n).subclipped(0, duration)
+
 
 class VideoBuilder:
     def __init__(self):
@@ -18,19 +40,14 @@ class VideoBuilder:
         audio_clip = AudioFileClip(audio_path)
         audio_duration = audio_clip.duration
         
-        # 1. Process Background Videos
+        # 1. Process Background Videos — resize to 1080×1920 and split evenly
         processed_video_clips = []
         time_per_clip = audio_duration / max(len(video_paths), 1)
         
         for path in video_paths:
             clip = VideoFileClip(path)
-            
-            # Ensure it covers the required time slice
-            if clip.duration < time_per_clip:
-                clip = clip.with_effects([vfx.Loop(duration=time_per_clip)])
-            else:
-                clip = clip.subclipped(0, time_per_clip)
-                
+            clip = _resize_to_portrait(clip)
+            clip = _loop_to_duration(clip, time_per_clip)
             processed_video_clips.append(clip)
             
         # Concatenate them all together sequentially
@@ -44,16 +61,13 @@ class VideoBuilder:
             print(f"Found {bgm_path}! Compositing background music with voiceover...")
             bgm_volume = float(os.getenv("BGM_VOLUME", "0.08"))
             
-            # Load music, loop it to match voice duration, and lower volume
             music_clip = AudioFileClip(bgm_path).with_effects([
                 afx.AudioLoop(duration=audio_duration),
                 afx.MultiplyVolume(bgm_volume)
             ])
-            
-            # Combine voice + music
             final_audio = CompositeAudioClip([audio_clip, music_clip])
             
-        # 3. Add Subtitles
+        # 3. Add Subtitles — bottom-centre (standard for YouTube Shorts)
         final_clips = [background_clip]
         
         if subtitle_path and os.path.exists(subtitle_path):
@@ -83,38 +97,42 @@ class VideoBuilder:
                     TextClip(
                         text=grp['text'].upper(),
                         font=FONT_PATH,
-                        font_size=62,
+                        font_size=72,
                         color="white",
                         stroke_color="black",
-                        stroke_width=4,
+                        stroke_width=5,
                         method="caption",
-                        size=(800, None),
+                        size=(900, None),
                     )
-                    .with_position(("center", 0.10), relative=True)
+                    .with_position(("center", 0.72), relative=True)
                     .with_start(grp['start'])
                     .with_duration(grp['end'] - grp['start'])
                 )
                 final_clips.append(text_clip)
 
-        # 4. Subscribe CTA overlay (last 3 seconds)
+        # 4. Subscribe CTA overlay (last 3 seconds) — above subtitles
         cta_start = max(0, audio_duration - 3.0)
         cta_clip = (
             TextClip(
                 text="⬇ SUBSCRIBE FOR MORE ⬇",
                 font=FONT_PATH,
-                font_size=55,
+                font_size=52,
                 color="yellow",
                 stroke_color="black",
                 stroke_width=3,
                 method="caption",
                 size=(900, None),
             )
-            .with_position(("center", 0.82), relative=True)
+            .with_position(("center", 0.88), relative=True)
             .with_start(cta_start)
             .with_duration(3.0)
         )
         final_clips.append(cta_clip)
-        composite_video = CompositeVideoClip(final_clips)
+
+        # Force output size to 1080×1920 and duration to match audio
+        composite_video = CompositeVideoClip(
+            final_clips, size=(TARGET_W, TARGET_H)
+        ).with_duration(audio_duration)
             
         # Apply the final mixed audio
         final_video = composite_video.with_audio(final_audio)
