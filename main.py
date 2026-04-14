@@ -13,7 +13,7 @@ from src.music_fetcher import MusicFetcher
 from src.news_fetcher import NewsFetcher
 
 def run_pipeline():
-    print("=== FACELESS VIDEO BOT PIPELINE STARTED (V2) ===")
+    print("=== FACELESS VIDEO BOT PIPELINE STARTED (V3) ===")
     
     parser = argparse.ArgumentParser()
     parser.add_argument('--topic', type=str, help='Override the topic from .env')

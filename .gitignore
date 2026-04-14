@@ -11,12 +11,26 @@ token.json
 temp_*.mp4
 temp_*.mp3
 temp_*.json
+temp_bg*.mp4
 bg_music.mp3
 final_short.mp4
 test_*.mp3
 test_*.mp4
 test_*.json
 test.py
+outputs/
+
+# =========================
+# One-time setup scripts (already deleted)
+# =========================
+generate_topics.py
+append_topics.py
+record_voice.py
+
+# =========================
+# Large binary assets
+# =========================
+assets/my_voice_b64.txt
 
 # =========================
 # Python Virtual Env

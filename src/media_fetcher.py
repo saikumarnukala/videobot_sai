@@ -88,13 +88,22 @@ class MediaFetcher:
                 continue
 
             print(f"  Downloading video for slot {i+1}...")
-            vid_resp = requests.get(video_url, stream=True, timeout=60)
-            with open(output_file, 'wb') as f:
-                for chunk in vid_resp.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-            print(f"  ✓ Downloaded to {output_file}")
-            downloaded_files.append(output_file)
+            for attempt in range(3):
+                try:
+                    vid_resp = requests.get(video_url, stream=True, timeout=60)
+                    vid_resp.raise_for_status()
+                    with open(output_file, 'wb') as f:
+                        for chunk in vid_resp.iter_content(chunk_size=65536):
+                            if chunk:
+                                f.write(chunk)
+                    print(f"  ✓ Downloaded to {output_file}")
+                    downloaded_files.append(output_file)
+                    break
+                except Exception as e:
+                    if attempt < 2:
+                        print(f"  [retry {attempt+1}] Download error: {e}")
+                    else:
+                        print(f"  [!] Failed to download slot {i+1} after 3 attempts: {e}")
             
         return downloaded_files
 
