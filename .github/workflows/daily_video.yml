@@ -81,7 +81,7 @@ jobs:
       # To use: encode your WAV as base64 → store as VOICE_SAMPLE_B64 secret
       #   PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes("my_voice.wav")) | clip
       - name: Restore voice sample
-        if: ${{ secrets.VOICE_SAMPLE_B64 != '' }}
+        if: ${{ vars.HAS_VOICE_SAMPLE == 'true' }}
         env:
           VOICE_B64: ${{ secrets.VOICE_SAMPLE_B64 }}
         run: |
