@@ -14,7 +14,7 @@ class ScriptGenerator:
             raise ValueError("GEMINI_API_KEY is missing or not configured in .env file.")
         
         self.client = genai.Client(api_key=self.api_key)
-        self.model_name = 'gemini-2.5-flash'
+        self.model_name = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
 
     def generate_script(self, topic, length_seconds=45):
         """
