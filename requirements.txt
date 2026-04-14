@@ -8,3 +8,4 @@ google-auth-httplib2
 python-dotenv
 feedparser
 elevenlabs
+TTS; python_version < "3.12"
