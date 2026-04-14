@@ -1,0 +1,37 @@
+# =========================
+# SECURITY - NEVER UPLOAD!
+# =========================
+.env
+client_secrets.json
+token.json
+
+# =========================
+# Generated Temp Files
+# =========================
+temp_*.mp4
+temp_*.mp3
+temp_*.json
+bg_music.mp3
+final_short.mp4
+test_*.mp3
+test_*.mp4
+test_*.json
+test.py
+
+# =========================
+# Python Virtual Env
+# =========================
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# =========================
+# IDE / OS Files
+# =========================
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
