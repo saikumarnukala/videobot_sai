@@ -1,6 +1,11 @@
 import os
 import json
+from pathlib import Path
 from moviepy import VideoFileClip, AudioFileClip, CompositeAudioClip, vfx, afx, TextClip, CompositeVideoClip, concatenate_videoclips
+
+# Resolve font path: use bundled font so it works on Linux (GitHub Actions) and Windows
+_ASSETS_DIR = Path(__file__).parent.parent / "assets"
+FONT_PATH = str(_ASSETS_DIR / "impact.ttf")
 
 class VideoBuilder:
     def __init__(self):
@@ -65,7 +70,7 @@ class VideoBuilder:
                 
                 text_clip = TextClip(
                     text=word.upper(),
-                    font=r"C:\Windows\Fonts\impact.ttf",
+                    font=FONT_PATH,
                     font_size=90,
                     color="white",
                     stroke_color="black",
