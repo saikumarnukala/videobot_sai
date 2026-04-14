@@ -1,5 +1,6 @@
 google-genai
 openai
+# groq uses openai client — no extra package needed
 edge-tts
 moviepy
 requests

@@ -2,26 +2,55 @@ import os
 import json
 from dotenv import load_dotenv
 
+# Quota / server errors that should trigger fallback instead of crashing
+_QUOTA_SIGNALS = ["429", "503", "RESOURCE_EXHAUSTED", "overloaded", "quota",
+                  "rate_limit", "rate limit", "too many requests"]
+
+def _is_quota_error(err: str) -> bool:
+    low = err.lower()
+    return any(s.lower() in low for s in _QUOTA_SIGNALS)
+
+
 class ScriptGenerator:
     def __init__(self):
         load_dotenv()
 
-        self.gemini_key = os.getenv("GEMINI_API_KEY")
-        self.model_name = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
-
-        self.github_token = os.getenv("GITHUB_TOKEN")
-        self.github_model = os.getenv('GITHUB_COPILOT_MODEL', 'gpt-4o')
-
-        # Init Gemini client only if key is present and not placeholder
+        # --- Gemini ---
+        self.gemini_key  = os.getenv("GEMINI_API_KEY")
+        self.model_name  = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         self.gemini_client = None
         if self.gemini_key and self.gemini_key != "your_gemini_api_key_here":
             from google import genai
             self.gemini_client = genai.Client(api_key=self.gemini_key)
 
-        if not self.gemini_client and not self.github_token:
+        # --- GitHub Copilot (Models API) ---
+        self.github_token = os.getenv("GITHUB_TOKEN")
+        self.github_model = os.getenv("GITHUB_COPILOT_MODEL", "gpt-4o")
+
+        # --- Groq (free, 14 400 req/day) ---
+        self.groq_key   = os.getenv("GROQ_API_KEY")
+        self.groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+        # --- Ollama (local, truly unlimited) ---
+        self.ollama_url   = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        self.ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2")
+        self.ollama_enabled = os.getenv("OLLAMA_ENABLED", "false").lower() == "true"
+
+        backends = [
+            self.gemini_client,
+            self.github_token,
+            self.groq_key,
+            self.ollama_enabled or None,
+        ]
+        if not any(backends):
             raise ValueError(
-                "No AI backend available. Set GEMINI_API_KEY or GITHUB_TOKEN in .env"
+                "No AI backend available. Set at least one of: "
+                "GEMINI_API_KEY, GITHUB_TOKEN, GROQ_API_KEY, or OLLAMA_ENABLED=true in .env"
             )
+
+    # ------------------------------------------------------------------ #
+    #  Shared helpers                                                      #
+    # ------------------------------------------------------------------ #
 
     def _build_prompt(self, topic, length_seconds):
         word_count = int(length_seconds) * 3
@@ -55,6 +84,10 @@ class ScriptGenerator:
         data = json.loads(text.strip())
         return data["script"], data["keywords"]
 
+    # ------------------------------------------------------------------ #
+    #  Backend implementations                                            #
+    # ------------------------------------------------------------------ #
+
     def _try_gemini(self, prompt):
         response = self.gemini_client.models.generate_content(
             model=self.model_name, contents=prompt
@@ -73,30 +106,81 @@ class ScriptGenerator:
         )
         return self._parse_response(response.choices[0].message.content)
 
+    def _try_groq(self, prompt):
+        from openai import OpenAI
+        client = OpenAI(
+            base_url="https://api.groq.com/openai/v1",
+            api_key=self.groq_key,
+        )
+        response = client.chat.completions.create(
+            model=self.groq_model,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return self._parse_response(response.choices[0].message.content)
+
+    def _try_ollama(self, prompt):
+        import urllib.request
+        payload = json.dumps({
+            "model": self.ollama_model,
+            "prompt": prompt,
+            "stream": False,
+        }).encode()
+        req = urllib.request.Request(
+            f"{self.ollama_url}/api/generate",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            data = json.loads(resp.read())
+        return self._parse_response(data["response"])
+
+    # ------------------------------------------------------------------ #
+    #  Main entry point with waterfall fallback                           #
+    # ------------------------------------------------------------------ #
+
     def generate_script(self, topic, length_seconds=45):
         """
-        Generates a video script based on the topic.
-        Tries Gemini first; falls back to GitHub Copilot (Models API) on quota/server errors.
+        Waterfall fallback order:
+          1. Gemini  (paid / free tier)
+          2. GitHub Copilot Models API  (150 req/day free with Copilot licence)
+          3. Groq  (14 400 req/day, free, ~2 s response)
+          4. Ollama  (local, unlimited — set OLLAMA_ENABLED=true)
         """
         prompt = self._build_prompt(topic, length_seconds)
         print(f"Generating script & scenes for topic: '{topic}'...")
 
+        backends = []
+
         if self.gemini_client:
+            backends.append(("Gemini",         self._try_gemini))
+        if self.github_token:
+            backends.append(("GitHub Copilot", self._try_github_copilot))
+        if self.groq_key:
+            backends.append(("Groq",           self._try_groq))
+        if self.ollama_enabled:
+            backends.append(("Ollama",         self._try_ollama))
+
+        last_err = None
+        for name, fn in backends:
             try:
-                return self._try_gemini(prompt)
+                result = fn(prompt)
+                if name != "Gemini":
+                    print(f"[ScriptGen] ✓ Script generated via {name}")
+                return result
             except Exception as e:
                 err = str(e)
-                if any(x in err for x in ["429", "503", "RESOURCE_EXHAUSTED", "overloaded", "quota"]):
-                    print(f"[ScriptGen] Gemini unavailable ({err[:80].strip()})")
-                    print("[ScriptGen] Falling back to GitHub Copilot...")
+                if _is_quota_error(err) or name in ("GitHub Copilot", "Groq", "Ollama"):
+                    print(f"[ScriptGen] {name} unavailable: {err[:100].strip()}")
+                    next_idx = [n for n, _ in backends].index(name) + 1
+                    if next_idx < len(backends):
+                        print(f"[ScriptGen] Falling back to {backends[next_idx][0]}...")
+                    last_err = e
                 else:
                     raise
 
-        if self.github_token:
-            return self._try_github_copilot(prompt)
-
         raise RuntimeError(
-            "All AI backends failed. Enable Gemini billing or add GITHUB_TOKEN to .env"
+            f"All AI backends exhausted. Last error: {last_err}\n"
+            "Options: enable Gemini billing, check GROQ_API_KEY, or set OLLAMA_ENABLED=true"
         )
 
 if __name__ == "__main__":
