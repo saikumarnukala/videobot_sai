@@ -68,17 +68,50 @@ def run_pipeline():
         output_path=final_output
     )
 
-    # 5. Upload to YouTube
+    # 6. Upload to YouTube
     print(f"\n[6/6] Checking YouTube Upload Status...")
     if upload_enabled:
         try:
             print("Upload is ENABLED! Connecting to YouTube...")
             uploader = YouTubeUploader()
-            video_title = f"{topic.title()} #Shorts"
-            # Extract a short description from the script
-            description = f"{script_text[:100]}...\n\n#shorts #viral #{''.join(keywords[0].split())}"
-            
-            uploader.upload_short(file_path=final_output, title=video_title, description=description)
+
+            # --- Title: clean, punchy, max 70 chars (YouTube limit is 100) ---
+            raw_title = topic.title()
+            video_title = f"{raw_title} #Shorts"
+            if len(video_title) > 70:
+                video_title = f"{raw_title[:65]}... #Shorts"
+
+            # --- Hashtags: from keywords + topic words + fixed viral tags ---
+            topic_tags  = [w.strip().lower() for w in topic.replace("-", " ").split() if len(w) > 3]
+            scene_tags  = ["".join(k.split()).lower() for k in keywords]
+            fixed_tags  = ["shorts", "shortsvideo", "viral", "trending", "facts",
+                           "youtubeshorts", "reels", "shortsfeed"]
+            all_hashtags = list(dict.fromkeys(
+                ["#" + t for t in (scene_tags + topic_tags + fixed_tags)]
+            ))[:15]   # YouTube allows up to 15 hashtags before penalising
+
+            # --- Description: hook sentence + full script teaser + hashtags ---
+            hook       = script_text[:150].rsplit(" ", 1)[0] + "..."
+            hashtag_str = " ".join(all_hashtags)
+            description = (
+                f"{hook}\n\n"
+                f"Watch till the end! 🔥\n\n"
+                f"───────────────────\n"
+                f"{hashtag_str}"
+            )
+
+            # --- Tags array for YouTube API (plain words, no #) ---
+            api_tags = [t.lstrip("#") for t in all_hashtags] + ["shortsvideo", "viralvideo"]
+
+            print(f"  Title      : {video_title}")
+            print(f"  Hashtags   : {hashtag_str}")
+
+            uploader.upload_short(
+                file_path=final_output,
+                title=video_title,
+                description=description,
+                tags=api_tags
+            )
         except Exception as e:
             print(f"YouTube Upload Failed (Is your client_secrets.json missing?): {e}")
     else:
