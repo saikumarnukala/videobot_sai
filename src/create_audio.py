@@ -2,6 +2,7 @@ import os
 import asyncio
 import edge_tts
 import json
+from mutagen.mp3 import MP3
 from dotenv import load_dotenv
 
 class AudioGenerator:
@@ -15,7 +16,7 @@ class AudioGenerator:
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                communicate = edge_tts.Communicate(text, self.voice, rate="-3%")
+                communicate = edge_tts.Communicate(text, self.voice, rate="-15%")
                 subs_data = [] 
                 
                 with open(output_file, "wb") as file:
@@ -37,7 +38,23 @@ class AudioGenerator:
                             
                 with open(subtitle_file, "w") as f:
                     json.dump(subs_data, f)
-                    
+
+                # If word boundaries were not returned (can happen after network retry),
+                # fall back to evenly distributing word timings from audio duration
+                if not subs_data and os.path.exists(output_file):
+                    print("[TTS] Word boundaries empty — generating estimated subtitle timings...")
+                    audio_dur = MP3(output_file).info.length
+                    words = [w for w in text.split() if w.strip()]
+                    if words and audio_dur > 0:
+                        word_dur = audio_dur / len(words)
+                        subs_data = [
+                            {"text": w, "start": round(i * word_dur, 3), "end": round((i + 1) * word_dur, 3)}
+                            for i, w in enumerate(words)
+                        ]
+                        with open(subtitle_file, "w") as f:
+                            json.dump(subs_data, f)
+                        print(f"[TTS] Estimated {len(subs_data)} word timings over {audio_dur:.1f}s")
+
                 # Success
                 return
 
@@ -55,13 +72,7 @@ class AudioGenerator:
             gen = ElevenLabsAudioGenerator()
             return gen.generate_audio_and_subs(text, output_file, subtitle_file)
 
-        # Priority 2 – Coqui XTTS v2 FREE voice clone (runs locally / on Actions)
-        if os.getenv("COQUI_VOICE_SAMPLE"):
-            from src.coqui_audio import CoquiAudioGenerator
-            gen = CoquiAudioGenerator()
-            return gen.generate_audio_and_subs(text, output_file, subtitle_file)
-
-        # Priority 3 – Edge TTS fallback (free, no clone, but very natural)
+        # Priority 2 – Edge TTS (free, human-sounding neural voice, no local model needed)
         asyncio.run(self._generate_audio_async(text, output_file, subtitle_file))
         if os.path.exists(output_file) and os.path.exists(subtitle_file):
             print(f"Audio and Subs successfully generated!")
