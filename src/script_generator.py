@@ -31,21 +31,15 @@ class ScriptGenerator:
         self.groq_key   = os.getenv("GROQ_API_KEY")
         self.groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
-        # --- Ollama (local, truly unlimited) ---
-        self.ollama_url   = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        self.ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2")
-        self.ollama_enabled = os.getenv("OLLAMA_ENABLED", "false").lower() == "true"
-
         backends = [
             self.gemini_client,
             self.github_token,
             self.groq_key,
-            self.ollama_enabled or None,
         ]
         if not any(backends):
             raise ValueError(
                 "No AI backend available. Set at least one of: "
-                "GEMINI_API_KEY, GITHUB_TOKEN, GROQ_API_KEY, or OLLAMA_ENABLED=true in .env"
+                "GEMINI_API_KEY, GITHUB_TOKEN, GROQ_API_KEY in .env"
             )
 
     # ------------------------------------------------------------------ #
@@ -118,22 +112,6 @@ class ScriptGenerator:
         )
         return self._parse_response(response.choices[0].message.content)
 
-    def _try_ollama(self, prompt):
-        import urllib.request
-        payload = json.dumps({
-            "model": self.ollama_model,
-            "prompt": prompt,
-            "stream": False,
-        }).encode()
-        req = urllib.request.Request(
-            f"{self.ollama_url}/api/generate",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=300) as resp:
-            data = json.loads(resp.read())
-        return self._parse_response(data["response"])
-
     # ------------------------------------------------------------------ #
     #  Main entry point with waterfall fallback                           #
     # ------------------------------------------------------------------ #
@@ -144,7 +122,6 @@ class ScriptGenerator:
           1. Gemini  (paid / free tier)
           2. GitHub Copilot Models API  (150 req/day free with Copilot licence)
           3. Groq  (14 400 req/day, free, ~2 s response)
-          4. Ollama  (local, unlimited — set OLLAMA_ENABLED=true)
         """
         prompt = self._build_prompt(topic, length_seconds)
         print(f"Generating script & scenes for topic: '{topic}'...")
@@ -157,8 +134,6 @@ class ScriptGenerator:
             backends.append(("GitHub Copilot", self._try_github_copilot))
         if self.groq_key:
             backends.append(("Groq",           self._try_groq))
-        if self.ollama_enabled:
-            backends.append(("Ollama",         self._try_ollama))
 
         last_err = None
         for name, fn in backends:
@@ -180,7 +155,7 @@ class ScriptGenerator:
 
         raise RuntimeError(
             f"All AI backends exhausted. Last error: {last_err}\n"
-            "Options: enable Gemini billing, check GROQ_API_KEY, or set OLLAMA_ENABLED=true"
+            "Options: enable Gemini billing, check GITHUB_TOKEN, or check GROQ_API_KEY"
         )
 
 if __name__ == "__main__":

@@ -131,6 +131,8 @@ jobs:
           VIDEO_LENGTH_SECONDS: "55"
           YOUTUBE_PRIVACY:    ${{ secrets.YOUTUBE_PRIVACY || 'public' }}
           GITHUB_TOKEN:       ${{ secrets.GITHUB_TOKEN }}
+          GROQ_API_KEY:       ${{ secrets.GROQ_API_KEY }}
+          GROQ_MODEL:         ${{ secrets.GROQ_MODEL || 'llama-3.3-70b-versatile' }}
         run: |
           if [ "${{ steps.topic_select.outputs.use_news }}" = "true" ]; then
             python main.py --news
