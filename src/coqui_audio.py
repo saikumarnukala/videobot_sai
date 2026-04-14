@@ -1,101 +1,126 @@
 """
-FREE voice cloning using Coqui XTTS v2.
+FREE voice cloning using F5-TTS (works on Python 3.14+, CPU + GPU).
 - Completely free, open-source (MIT licence)
-- Clones your voice from as little as 6 seconds of reference audio
-- Runs on CPU (slow, ~3-5× real-time) or GPU (fast, ~0.3× real-time)
-- First run downloads the XTTS v2 model once (~1.8 GB, cached after that)
+- Zero-shot voice clone from your reference recording
+- First run downloads the F5-TTS model once (~1.5 GB, cached after that)
 
-Setup (one-time, takes ~5 minutes):
-  1. pip install TTS
-  2. Record yourself speaking for 30–60 seconds and save as:
-         assets/my_voice.wav    (or any WAV/MP3 file)
-  3. Set in .env (local) or GitHub Secret (cloud):
-         COQUI_VOICE_SAMPLE=assets/my_voice.wav
-  4. Done — the pipeline auto-switches to your cloned voice.
-
-For GitHub Actions:
-  - Commit your voice sample file to the repo (e.g. assets/my_voice.wav)
-    OR store it as a base64 secret (VOICE_SAMPLE_B64) and decode it at runtime
-  - GPU runners cost more; CPU works but adds ~3-4 min to render time
-  
-Tip: record in a quiet room, speak the kind of sentences the bot will say.
-The more varied your sample, the better the clone quality.
+Setup:
+  1. pip install f5-tts      (already done)
+  2. Record yourself: python record_voice.py  ->  assets/my_voice.wav
+  3. Add to .env:  COQUI_VOICE_SAMPLE=assets/my_voice.wav
 """
 
 import os
 import json
 import re
-import tempfile
+
+
+# Reference text that was read aloud during the voice recording.
+# F5-TTS needs to know what was said in the reference audio.
+# Override by creating assets/my_voice_ref.txt with the exact text you recorded.
+_DEFAULT_REF_TEXT = (
+    "Hi welcome to MindVault. Every day I bring you the most powerful ideas "
+    "from science philosophy and human psychology. Did you know that the human "
+    "brain can process information 20 times faster than any computer ever built. "
+    "Stoic philosophers believed that the obstacle is the way. The compound effect "
+    "is the most underrated force in the world. Small improvements every single day "
+    "result in 37 times better outcomes after one full year. Warren Buffett made "
+    "97 percent of his entire wealth after the age of 65. Thank you for watching."
+)
 
 
 class CoquiAudioGenerator:
-    _MODEL = "tts_models/multilingual/multi-dataset/xtts_v2"
+    """Named CoquiAudioGenerator for create_audio.py compatibility. Uses F5-TTS internally."""
 
     def __init__(self):
         self.voice_sample = os.getenv("COQUI_VOICE_SAMPLE", "assets/my_voice.wav")
         if not os.path.exists(self.voice_sample):
             raise FileNotFoundError(
                 f"Voice sample not found: '{self.voice_sample}'. "
-                "Record 30–60s of your voice, save it, and set COQUI_VOICE_SAMPLE "
-                "to its path (e.g. assets/my_voice.wav)."
+                "Run record_voice.py to record your voice, then set "
+                "COQUI_VOICE_SAMPLE=assets/my_voice.wav in .env"
             )
+        # Load reference text from sidecar file or fall back to default
+        ref_txt = os.path.splitext(self.voice_sample)[0] + "_ref.txt"
+        if os.path.exists(ref_txt):
+            with open(ref_txt, "r", encoding="utf-8") as fh:
+                self.ref_text = fh.read().strip()
+            print(f"[F5-TTS] Loaded reference text from {ref_txt}")
+        else:
+            self.ref_text = _DEFAULT_REF_TEXT
 
-    def _load_tts(self):
-        """Lazy-load TTS so the import only happens if Coqui is actually used."""
+    def _find_ffmpeg(self):
+        """Return ffmpeg path; prefers imageio-ffmpeg bundled with moviepy."""
         try:
-            from TTS.api import TTS  # pip install TTS
-        except ImportError:
-            raise ImportError(
-                "Coqui TTS is not installed. Run:  pip install TTS\n"
-                "Then restart the pipeline."
-            )
-        print(f"[Coqui] Loading XTTS v2 model (downloads ~1.8 GB on first run)...")
-        # gpu=True massively speeds this up; falls back gracefully to CPU
-        tts = TTS(self._MODEL, gpu=self._has_gpu())
-        return tts
-
-    @staticmethod
-    def _has_gpu() -> bool:
-        try:
-            import torch
-            return torch.cuda.is_available()
-        except ImportError:
-            return False
+            import imageio_ffmpeg
+            path = imageio_ffmpeg.get_ffmpeg_exe()
+            if path and os.path.exists(path):
+                ffmpeg_dir = os.path.dirname(path)
+                if ffmpeg_dir not in os.environ.get("PATH", ""):
+                    os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+                return path
+        except Exception:
+            pass
+        return "ffmpeg"
 
     def generate_audio_and_subs(self, text, output_file="temp_audio.mp3",
                                 subtitle_file="temp_subs.json"):
-        tts = self._load_tts()
+        ffmpeg_bin = self._find_ffmpeg()
 
-        # XTTS works best with WAV output; convert to MP3 after if needed
-        if output_file.endswith(".mp3"):
-            wav_file = output_file.replace(".mp3", "_raw.wav")
-        else:
-            wav_file = output_file
+        try:
+            from f5_tts.api import F5TTS
+        except ImportError:
+            raise ImportError("F5-TTS not installed. Run: pip install f5-tts")
 
-        print(f"[Coqui] Synthesising with your cloned voice (speaker: {self.voice_sample})...")
-        tts.tts_to_file(
-            text=text,
-            speaker_wav=self.voice_sample,
-            language="en",
-            file_path=wav_file,
-        )
+        print("[F5-TTS] Loading model (downloads ~1.5 GB on first run)...")
+        f5 = F5TTS()
 
-        # Convert WAV → MP3 using ffmpeg (already in the pipeline)
-        if wav_file != output_file:
-            import subprocess
-            subprocess.run(
-                ["ffmpeg", "-y", "-i", wav_file, "-q:a", "2", output_file],
-                check=True,
-                capture_output=True,
+        # Patch torchaudio.load to use soundfile — FFmpeg DLLs not available on this machine
+        # F5-TTS calls torchaudio.load(ref_audio) internally; soundfile handles WAV without ffmpeg.
+        try:
+            import torchaudio, soundfile as sf, torch as _torch
+
+            def _sf_load(path, *a, **kw):
+                data, rate = sf.read(str(path), dtype="float32", always_2d=True)
+                return _torch.from_numpy(data.T), rate
+
+            torchaudio.load = _sf_load
+        except Exception:
+            pass  # best effort — will surface as a proper error inside infer() if it fails
+
+        print(f"[F5-TTS] Cloning your voice for: {text[:60]}...")
+        import torch
+        with torch.inference_mode():
+            wav, sr, _ = f5.infer(
+                ref_file=self.voice_sample,
+                ref_text=self.ref_text,
+                gen_text=text,
+                nfe_step=8,   # 8 steps: ~4x faster than 32, still good quality on CPU
+                speed=1.0,
             )
-            os.remove(wav_file)
 
-        # Build proportional word-level subtitles from audio duration
+        import numpy as np
+        import soundfile as sf
+        import subprocess
+
+        wav_arr = np.array(wav, dtype=np.float32)
+        if wav_arr.ndim > 1:
+            wav_arr = wav_arr.squeeze()
+
+        wav_file = output_file.replace(".mp3", "_raw.wav")
+        sf.write(wav_file, wav_arr, sr)
+
+        subprocess.run(
+            [ffmpeg_bin, "-y", "-i", wav_file, "-q:a", "2", output_file],
+            check=True, capture_output=True,
+        )
+        os.remove(wav_file)
+
         subs = self._build_word_subs(text, output_file)
         with open(subtitle_file, "w", encoding="utf-8") as f:
             json.dump(subs, f)
 
-        print(f"[Coqui] Done. Audio: {output_file} | Subtitles: {len(subs)} words")
+        print(f"[F5-TTS] Done. Audio: {output_file} | Subtitles: {len(subs)} words")
         return output_file, subtitle_file
 
     # ------------------------------------------------------------------

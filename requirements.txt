@@ -9,3 +9,5 @@ python-dotenv
 feedparser
 elevenlabs
 TTS; python_version < "3.12"
+f5-tts; python_version >= "3.12"
+soundfile
