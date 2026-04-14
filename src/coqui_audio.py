@@ -101,7 +101,6 @@ class CoquiAudioGenerator:
 
         import numpy as np
         import soundfile as sf
-        import subprocess
 
         wav_arr = np.array(wav, dtype=np.float32)
         if wav_arr.ndim > 1:
@@ -110,13 +109,23 @@ class CoquiAudioGenerator:
         wav_file = output_file.replace(".mp3", "_raw.wav")
         sf.write(wav_file, wav_arr, sr)
 
-        subprocess.run(
-            [ffmpeg_bin, "-y", "-i", wav_file, "-q:a", "2", output_file],
-            check=True, capture_output=True,
-        )
-        os.remove(wav_file)
+        # Convert WAV → MP3 using pydub with imageio-ffmpeg (no system ffmpeg needed)
+        try:
+            from pydub import AudioSegment
+            AudioSegment.converter = ffmpeg_bin
+            audio_seg = AudioSegment.from_wav(wav_file)
+            audio_seg.export(output_file, format="mp3", bitrate="128k")
+        except Exception:
+            # pydub failed — rename WAV to the output path as fallback
+            import shutil
+            shutil.move(wav_file, output_file)
+            wav_file = None
 
-        subs = self._build_word_subs(text, output_file)
+        if wav_file and os.path.exists(wav_file):
+            os.remove(wav_file)
+
+        duration = len(wav_arr) / sr  # exact duration from the generated audio
+        subs = self._build_word_subs(text, duration)
         with open(subtitle_file, "w", encoding="utf-8") as f:
             json.dump(subs, f)
 
@@ -126,12 +135,7 @@ class CoquiAudioGenerator:
     # ------------------------------------------------------------------
     # Subtitle timing: proportional estimate based on audio duration
     # ------------------------------------------------------------------
-    def _build_word_subs(self, text, audio_file):
-        from moviepy import AudioFileClip
-        clip     = AudioFileClip(audio_file)
-        duration = clip.duration
-        clip.close()
-
+    def _build_word_subs(self, text, duration):
         words = [re.sub(r"[^\w'-]", "", w) for w in text.split()]
         words = [w for w in words if w]
         if not words:
