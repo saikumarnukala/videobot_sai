@@ -6,14 +6,16 @@ Slot auto-detection (UTC):
   12:00 – 15:59  →  afternoon
   18:00 – 23:59  →  evening  (also the default)
 
-Topic rotation: uses today's date + slot as a deterministic seed so the
-same topic is never picked twice on the same day, and they cycle through
-the full list over time.
+Topic rotation: sequential round-robin based on days elapsed since a fixed
+epoch. Every topic in a slot is used exactly once before any topic repeats.
+With 10 topics per slot that means each topic reappears every 10 days.
 """
 import json
 import argparse
-import hashlib
 from datetime import date, datetime, timezone
+
+# Fixed epoch — day 0 of the rotation
+_EPOCH = date(2026, 1, 1)
 
 
 def get_current_slot() -> str:
@@ -34,10 +36,9 @@ def select_topic(slot: str) -> str:
     if not topic_list:
         raise ValueError(f"No topics found for slot: {slot}")
 
-    # Deterministic daily rotation: same slot always picks same topic per day
-    seed_str = f"{date.today().isoformat()}_{slot}"
-    seed = int(hashlib.md5(seed_str.encode()).hexdigest(), 16)
-    index = seed % len(topic_list)
+    # Sequential round-robin: each topic used once before any repeats
+    days_elapsed = (date.today() - _EPOCH).days
+    index = days_elapsed % len(topic_list)
     return topic_list[index]
 
 

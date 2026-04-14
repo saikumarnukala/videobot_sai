@@ -26,8 +26,9 @@ class MediaFetcher:
             params = {
                 "query": query,
                 "orientation": "portrait",
-                "size": "medium", 
-                "per_page": 15
+                "size": "medium",
+                "per_page": 15,
+                "page": random.randint(1, 5)   # random page → ~75 unique video pool per keyword
             }
             
             response = requests.get(url, headers=self.headers, params=params)
