@@ -1,4 +1,5 @@
 google-genai
+openai
 edge-tts
 moviepy
 requests
