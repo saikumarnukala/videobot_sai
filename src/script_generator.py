@@ -1,6 +1,6 @@
 import os
 import json
-import google.generativeai as genai
+from google import genai
 from dotenv import load_dotenv
 
 class ScriptGenerator:
@@ -13,10 +13,8 @@ class ScriptGenerator:
         if not self.api_key or self.api_key == "your_gemini_api_key_here":
             raise ValueError("GEMINI_API_KEY is missing or not configured in .env file.")
         
-        genai.configure(api_key=self.api_key)
-        
-        # Use the latest fast model
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
+        self.client = genai.Client(api_key=self.api_key)
+        self.model_name = 'gemini-2.5-flash'
 
     def generate_script(self, topic, length_seconds=45):
         """
@@ -45,7 +43,7 @@ class ScriptGenerator:
         """
         
         print(f"Generating script & scenes for topic: '{topic}'...")
-        response = self.model.generate_content(prompt)
+        response = self.client.models.generate_content(model=self.model_name, contents=prompt)
         
         text = response.text.strip()
         # Clean up possible markdown code blocks from Gemini

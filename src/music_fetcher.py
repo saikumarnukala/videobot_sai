@@ -24,18 +24,41 @@ class MusicFetcher:
         """
         topic_lower = topic.lower()
         
-        if any(w in topic_lower for w in ["motivat", "success", "goal", "hustle", "growth"]):
+        # Motivational / self-improvement / morning topics
+        if any(w in topic_lower for w in ["motivat", "success", "goal", "hustle", "growth",
+                                           "habit", "discipline", "stoic", "wisdom", "mindset",
+                                           "billionaire", "routine", "intelligent", "best",
+                                           "dominate", "win", "achieve", "powerful"]):
             return "energetic,uplifting"
+        # Money / business / finance topics
+        elif any(w in topic_lower for w in ["money", "income", "invest", "wealth", "rich",
+                                             "millionaire", "financial", "salary", "business",
+                                             "brand", "passive", "hustle", "side", "earn",
+                                             "profit", "budget", "negotiate"]):
+            return "corporate,uplifting"
+        # Science / tech / facts / brain topics
+        elif any(w in topic_lower for w in ["brain", "psychology", "facts", "history", "ancient",
+                                             "civiliz", "quantum", "physics", "discover", "experiment",
+                                             "secret", "hidden", "truth", "mind"]):
+            return "cinematic,electronic"
+        # Space / AI / future / tech topics
+        elif any(w in topic_lower for w in ["space", "universe", "science", "tech", "ai",
+                                             "future", "robot", "technology", "digital"]):
+            return "electronic,ambient"
+        # Scary / danger / dark topics
+        elif any(w in topic_lower for w in ["scary", "horror", "dark", "creepy", "danger",
+                                             "scariest", "terrifying", "nightmare"]):
+            return "dark,suspense"
+        # Ocean / nature / travel topics
+        elif any(w in topic_lower for w in ["ocean", "sea", "nature", "travel", "adventure",
+                                             "explore", "deep", "forest", "mountain"]):
+            return "ambient,peaceful"
+        # Calm / wellness topics
         elif any(w in topic_lower for w in ["calm", "meditat", "mindful", "relax", "peaceful"]):
             return "ambient,peaceful"
-        elif any(w in topic_lower for w in ["scary", "horror", "dark", "creepy", "danger"]):
-            return "dark,suspense"
+        # Happy / comedy topics
         elif any(w in topic_lower for w in ["happy", "funny", "comedy", "joy"]):
             return "happy,pop"
-        elif any(w in topic_lower for w in ["space", "universe", "science", "tech", "ai", "future"]):
-            return "electronic,ambient"
-        elif any(w in topic_lower for w in ["nature", "travel", "adventure", "explore"]):
-            return "acoustic,uplifting"
         else:
             # Default: upbeat and positive
             return "uplifting,instrumental"

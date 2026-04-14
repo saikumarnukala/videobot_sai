@@ -24,7 +24,7 @@ def run_pipeline():
     target_length = int(os.getenv("VIDEO_LENGTH_SECONDS", "45"))
     upload_enabled = os.getenv("UPLOAD_TO_YOUTUBE", "False").lower() in ("true", "1", "yes")
     
-    print(f"\n[1/5] Generating Script & Scenes for topic: '{topic}'...")
+    print(f"\n[1/6] Generating Script & Scenes for topic: '{topic}'...")
     script_gen = ScriptGenerator()
     script_text, keywords = script_gen.generate_script(topic, length_seconds=target_length)
     
@@ -35,17 +35,19 @@ def run_pipeline():
     print("--------------\n")
 
     # 2. Audio Generation
-    print(f"\n[2/5] Generating Voiceover & Subtitles...")
+    print(f"\n[2/6] Generating Voiceover & Subtitles...")
     audio_gen = AudioGenerator()
     audio_file = "temp_audio.mp3"
     subs_file = "temp_subs.json"
     audio_gen.generate_audio_and_subs(script_text, output_file=audio_file, subtitle_file=subs_file)
 
     # 3. Download Background Media
-    print(f"\n[3/5] Fetching Background Videos...")
+    print(f"\n[3/6] Fetching Background Videos...")
     media_fetcher = MediaFetcher()
     # It will fetch one video for each keyword the AI came up with!
     video_files = media_fetcher.fetch_background_videos(keywords, min_duration=5)
+    if not video_files:
+        raise RuntimeError("All Pexels video downloads failed. Cannot build video. Check PEXELS_API_KEY and API quota.")
 
     # 4. Download Background Music from Jamendo
     print(f"\n[4/6] Fetching Background Music from Jamendo...")
@@ -56,7 +58,7 @@ def run_pipeline():
         print(f"[!] Music fetch failed (will render without music): {e}")
 
     # 5. Build Final Video
-    print(f"\n[4/5] Rendering Final Video with Situational Clips, BGM & Subtitles...")
+    print(f"\n[5/6] Rendering Final Video with Situational Clips, BGM & Subtitles...")
     video_builder = VideoBuilder()
     final_output = "final_short.mp4"
     video_builder.build_final_video(
@@ -67,7 +69,7 @@ def run_pipeline():
     )
 
     # 5. Upload to YouTube
-    print(f"\n[5/5] Checking YouTube Upload Status...")
+    print(f"\n[6/6] Checking YouTube Upload Status...")
     if upload_enabled:
         try:
             print("Upload is ENABLED! Connecting to YouTube...")

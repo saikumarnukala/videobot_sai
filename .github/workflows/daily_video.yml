@@ -42,6 +42,8 @@ jobs:
   generate-and-upload:
     runs-on: ubuntu-latest
     timeout-minutes: 45   # Generous timeout for video rendering
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # Suppress Node.js 20 deprecation warning
 
     steps:
       # ── 1. Source code ────────────────────────────────────────────────
@@ -67,9 +69,12 @@ jobs:
 
       # ── 5. Restore YouTube OAuth credentials from secrets ─────────────
       - name: Restore YouTube credentials
+        env:
+          CLIENT_SECRETS: ${{ secrets.YOUTUBE_CLIENT_SECRETS_JSON }}
+          TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
         run: |
-          echo '${{ secrets.YOUTUBE_CLIENT_SECRETS_JSON }}' > client_secrets.json
-          echo '${{ secrets.YOUTUBE_TOKEN_JSON }}' > token.json
+          printf '%s' "$CLIENT_SECRETS" > client_secrets.json
+          printf '%s' "$TOKEN_JSON" > token.json
 
       # ── 6. Choose topic ───────────────────────────────────────────────
       - name: Select topic for this run

@@ -62,7 +62,9 @@ class VideoBuilder:
                 subs = json.load(f)
                 
             for i, sub in enumerate(subs):
-                word = sub['text']
+                word = sub.get('text', '').strip()
+                if not word:
+                    continue
                 start = sub['start']
                 end = sub['end']
                 
@@ -100,6 +102,12 @@ class VideoBuilder:
         # Cleanup
         background_clip.close()
         audio_clip.close()
+        if os.path.exists(bgm_path) and 'music_clip' in dir():
+            try:
+                music_clip.close()
+                final_audio.close()
+            except Exception:
+                pass
         for c in processed_video_clips:
             c.close()
         composite_video.close()

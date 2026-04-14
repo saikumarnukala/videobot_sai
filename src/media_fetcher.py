@@ -56,7 +56,7 @@ class MediaFetcher:
             print(f"Downloading HD background video for '{query}'...")
             
             # Stream the download
-            vid_resp = requests.get(best_file, stream=True)
+            vid_resp = requests.get(best_file, stream=True, timeout=60)
             with open(output_file, 'wb') as f:
                 for chunk in vid_resp.iter_content(chunk_size=8192):
                     if chunk:
