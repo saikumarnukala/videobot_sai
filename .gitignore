@@ -18,7 +18,8 @@ test_*.mp3
 test_*.mp4
 test_*.json
 test.py
-outputs/
+temp/
+output/
 
 # =========================
 # One-time setup scripts (already deleted)

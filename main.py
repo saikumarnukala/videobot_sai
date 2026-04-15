@@ -46,8 +46,8 @@ def run_pipeline():
     # 2. Audio Generation
     print(f"\n[2/6] Generating Voiceover & Subtitles...")
     audio_gen = AudioGenerator()
-    audio_file = "temp_audio.mp3"
-    subs_file = "temp_subs.json"
+    audio_file = "temp/temp_audio.mp3"
+    subs_file = "temp/temp_subs.json"
     audio_gen.generate_audio_and_subs(script_text, output_file=audio_file, subtitle_file=subs_file)
 
     # 3. Download Background Media
@@ -62,14 +62,14 @@ def run_pipeline():
     print(f"\n[4/6] Fetching Background Music from Jamendo...")
     try:
         music_fetcher = MusicFetcher()
-        music_fetcher.fetch_music(topic, output_file="bg_music.mp3")
+        music_fetcher.fetch_music(topic, output_file="temp/bg_music.mp3")
     except Exception as e:
         print(f"[!] Music fetch failed (will render without music): {e}")
 
     # 5. Build Final Video
     print(f"\n[5/6] Rendering Final Video with Situational Clips, BGM & Subtitles...")
     video_builder = VideoBuilder()
-    final_output = "final_short.mp4"
+    final_output = "output/final_short.mp4"
     video_builder.build_final_video(
         video_paths=video_files, 
         audio_path=audio_file, 
@@ -127,6 +127,18 @@ def run_pipeline():
         print("Upload is DISABLED via .env file. Skipping upload so you can preview it locally!")
 
     print(f"\n=== PIPELINE SUCCESS: '{final_output}' ===")
+
+    # 7. Cleanup temp folder
+    print("\n[7/7] Cleaning up temporary processing files...")
+    temp_dir = "temp"
+    if os.path.exists(temp_dir):
+        for file in os.listdir(temp_dir):
+            file_path = os.path.join(temp_dir, file)
+            try:
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                print(f"Warning: Could not delete {file_path}: {e}")
 
 if __name__ == "__main__":
     try:

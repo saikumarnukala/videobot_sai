@@ -143,7 +143,7 @@ class VideoBuilder:
         background_clip = concatenate_videoclips(processed_video_clips, method="compose")
         
         # 2. Process Audio (Voiceover + Background Music)
-        bgm_path = "bg_music.mp3"
+        bgm_path = "temp/bg_music.mp3"
         final_audio = audio_clip
         if os.path.exists(bgm_path):
             print(f"Found {bgm_path}! Compositing background music with voiceover...")

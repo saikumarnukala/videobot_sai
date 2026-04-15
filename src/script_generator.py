@@ -146,7 +146,7 @@ class ScriptGenerator:
             try:
                 result = fn(prompt)
                 if name != "Gemini":
-                    print(f"[ScriptGen] ✓ Script generated via {name}")
+                    print(f"[ScriptGen] [OK] Script generated via {name}")
                 return result
             except Exception as e:
                 err = str(e)

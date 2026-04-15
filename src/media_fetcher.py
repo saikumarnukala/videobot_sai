@@ -79,7 +79,7 @@ class MediaFetcher:
         """
         downloaded_files = []
         for i, query in enumerate(keywords):
-            output_file = f"temp_bg_{i}.mp4"
+            output_file = f"temp/temp_bg_{i}.mp4"
             print(f"[{i+1}/{len(keywords)}] Searching Pexels for: '{query}'...")
 
             video_url = self._find_video(query, i, min_duration)
@@ -96,7 +96,7 @@ class MediaFetcher:
                         for chunk in vid_resp.iter_content(chunk_size=65536):
                             if chunk:
                                 f.write(chunk)
-                    print(f"  ✓ Downloaded to {output_file}")
+                    print(f"  [OK] Downloaded to {output_file}")
                     downloaded_files.append(output_file)
                     break
                 except Exception as e:
