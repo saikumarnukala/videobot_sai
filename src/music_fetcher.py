@@ -70,7 +70,7 @@ class MusicFetcher:
             # Default: cinematic and uplifting
             return "cinematic+uplifting"
 
-    def fetch_music(self, topic: str, output_file: str = "bg_music.mp3", return_track: bool = False):
+    def fetch_music(self, topic: str, output_file: str = "bg_music.mp3") -> dict:
         """
         Downloads background music relevant to the video topic.
         Saves it as 'bg_music.mp3' ready for the video builder to pick up.
@@ -125,9 +125,7 @@ class MusicFetcher:
                     f.write(chunk)
 
         print(f"Background music saved to '{output_file}'!")
-        if return_track:
-            return {"file_path": output_file, "track": track}
-        return output_file
+        return {"file_path": output_file, "track": track}
 
 
 if __name__ == "__main__":

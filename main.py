@@ -69,8 +69,7 @@ def run_pipeline():
         music_fetcher = MusicFetcher()
         music_result = music_fetcher.fetch_music(
             topic,
-            output_file="temp/bg_music.mp3",
-            return_track=True
+            output_file="temp/bg_music.mp3"
         )
         selected_music = music_result.get("track")
     except Exception as e:
