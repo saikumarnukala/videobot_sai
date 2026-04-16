@@ -32,7 +32,11 @@ def run_pipeline():
         topic = os.getenv("VIDEO_TOPIC", "interesting facts about space")
     target_length = int(os.getenv("VIDEO_LENGTH_SECONDS", "45"))
     upload_enabled = os.getenv("UPLOAD_TO_YOUTUBE", "False").lower() in ("true", "1", "yes")
-    
+
+    # Ensure working directories exist (required on fresh CI runners)
+    os.makedirs("temp", exist_ok=True)
+    os.makedirs("output", exist_ok=True)
+
     print(f"\n[1/6] Generating Script & Scenes for topic: '{topic}'...")
     script_gen = ScriptGenerator()
     script_text, keywords = script_gen.generate_script(topic, length_seconds=target_length)
