@@ -45,6 +45,8 @@ jobs:
   generate-and-upload:
     runs-on: ubuntu-latest
     timeout-minutes: 45   # Generous timeout for video rendering
+    permissions:
+      contents: write      # needed to push used_topics.json back to repo
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # Suppress Node.js 20 deprecation warning
 
@@ -52,6 +54,8 @@ jobs:
       # ── 1. Source code ────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       # ── 2. Python environment ─────────────────────────────────────────
       - name: Set up Python 3.11
@@ -121,7 +125,7 @@ jobs:
             echo "news_index=0" >> "$GITHUB_OUTPUT"
           elif [ -n "$OVERRIDE_SLOT" ]; then
             # Manual dispatch with a specific topic slot
-            TOPIC=$(python select_topic.py --slot "$OVERRIDE_SLOT" --run-number ${{ github.run_number }})
+            TOPIC=$(python select_topic.py --slot "$OVERRIDE_SLOT" --run-number ${{ github.run_number }} --mark-used)
             echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
             echo "use_news=false" >> "$GITHUB_OUTPUT"
             echo "news_index=0" >> "$GITHUB_OUTPUT"
@@ -141,7 +145,7 @@ jobs:
               echo "use_news=true" >> "$GITHUB_OUTPUT"
               echo "news_index=2" >> "$GITHUB_OUTPUT"
             else
-              TOPIC=$(python select_topic.py --run-number ${{ github.run_number }})
+              TOPIC=$(python select_topic.py --run-number ${{ github.run_number }} --mark-used)
               echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
               echo "use_news=false" >> "$GITHUB_OUTPUT"
               echo "news_index=0" >> "$GITHUB_OUTPUT"
@@ -156,6 +160,7 @@ jobs:
           JAMENDO_CLIENT_ID:  ${{ secrets.JAMENDO_CLIENT_ID }}
           UPLOAD_TO_YOUTUBE:  "true"
           VIDEO_LENGTH_SECONDS: "55"
+          RENDER_PRESET:      "medium"
           YOUTUBE_PRIVACY:    ${{ secrets.YOUTUBE_PRIVACY || 'public' }}
           GITHUB_TOKEN:       ${{ secrets.GITHUB_TOKEN }}
           GROQ_API_KEY:       ${{ secrets.GROQ_API_KEY }}
@@ -167,7 +172,18 @@ jobs:
             python main.py --topic "${{ steps.topic_select.outputs.topic }}"
           fi
 
-      # ── 8. Clean up (always runs, even on failure) ────────────────────
+      # ── 8. Persist used-topics ledger (never repeat a topic) ────────────
+      - name: Commit used_topics.json
+        if: success()
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -f used_topics.json ]; then
+            git add used_topics.json
+            git diff --cached --quiet || git commit -m "chore: update used_topics.json [skip ci]" && git push
+          fi
+
+      # ── 9. Clean up (always runs, even on failure) ────────────────────
       - name: Clean up temp files
         if: always()
         run: |

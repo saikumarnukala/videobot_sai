@@ -49,43 +49,55 @@ class ScriptGenerator:
     def _build_prompt(self, topic, length_seconds):
         word_count = int(length_seconds) * 3
         return f"""
-        You are a world-class short-form video scriptwriter known for viral YouTube Shorts.
+        You are an elite-tier short-form video scriptwriter responsible for scripts
+        that consistently generate 1M+ views on YouTube Shorts. 
         Write a cinematic, emotionally gripping script about: {topic}.
 
         The script should take exactly {length_seconds} seconds to read aloud (approximately {word_count} words).
 
-        SCRIPT STRUCTURE (follow this arc):
-        1. HOOK (first 3 seconds): Start with an irresistible question, shocking stat, or bold
-           contrarian statement that makes the viewer STOP scrolling immediately.
-        2. TENSION (next 60%): Build curiosity with rapid-fire revelations, mini-stories,
-           or "most people don't know" insights. Use emotional triggers — surprise, fear,
-           awe, or urgency. Vary sentence length for rhythm.
-        3. PAYOFF (final 20%): Deliver a powerful conclusion — a mindset shift, call to
-           action, or thought-provoking closer that makes people comment and share.
+        SCRIPT STRUCTURE (follow this arc precisely):
+        1. HOOK (first 3 seconds): Open with a pattern interrupt — a shocking stat,
+           bold contrarian claim, or impossible-sounding question that forces the viewer
+           to STOP scrolling. The first sentence decides if 95% of viewers stay or leave.
+        2. TENSION BUILD (next 40%): Layer rapid-fire revelations using the "open loop"
+           technique — introduce a mystery or promise, delay the answer. Use vivid sensory
+           language. Mix 3-word punchy sentences with one longer dramatic sentence for rhythm.
+           Include at least one "most people don't know this" or "here's where it gets crazy" moment.
+        3. CLIMAX (next 30%): Deliver the most shocking, valuable, or emotional insight.
+           Make the viewer feel something — awe, urgency, fear, or inspiration. This is
+           the moment they screenshot or share.
+        4. PAYOFF & CTA (final 10%): End with a thought-provoking one-liner that lingers
+           in the mind. Then a natural call to action: "follow for more" woven into the
+           narrative, NOT a generic ask.
 
         STYLE RULES:
-        - Write as if narrating a mini-documentary, NOT a listicle.
+        - Write as if narrating a cinematic mini-documentary, NOT a listicle or blog post.
         - Use vivid, sensory language ("imagine standing at the edge of…").
-        - Sentences should feel punchy and cinematic — mix short bursts with one longer
-          dramatic sentence for rhythm.
-        - Do NOT include stage directions, labels, or emojis. ONLY spoken words.
+        - Vary rhythm: short bursts. Then a longer dramatic sentence that builds tension.
+        - Use rhetorical questions sparingly but powerfully.
+        - Do NOT include stage directions, labels, timestamps, or emojis. ONLY spoken words.
+        - Do NOT use filler phrases like "in this video" or "today we're going to talk about".
 
         BACKGROUND VIDEO KEYWORDS:
-        Generate exactly 5 cinematic background video search terms.
+        Generate exactly 8 cinematic background video search terms (one per scene change).
         These are searched on Pexels stock video, so they MUST be:
-        - Visually stunning and physically filmable (real footage, not concepts)
-        - Cinematic and high-production-feel (think drone shots, slow-motion, golden hour)
+        - Visually stunning and physically filmable (real footage, not abstract concepts)
+        - Cinematic and high-production-feel (drone shots, slow-motion, golden hour, macro)
+        - Each keyword MUST be different — no two scenes should look similar
         - Matched to the MOOD and EMOTION of each section of the script
         - Generic enough to return results (no specific people, brands, flags, or maps)
+        - 3-5 words each, descriptive and visual
 
         Good examples: "aerial city skyline golden hour", "slow motion ocean waves crash",
-        "close up eye opening dramatic", "timelapse night sky stars", "crowd walking busy street slow motion",
-        "dramatic sunrise mountain peak", "dark smoke rising cinematic", "hands typing laptop close up".
+        "close up eye opening dramatic", "timelapse night sky stars milkyway",
+        "crowd walking busy street slow motion", "dramatic sunrise mountain peak",
+        "dark smoke rising cinematic", "hands typing laptop close up cinematic",
+        "rain drops window close up", "forest fog morning light rays".
 
         OUTPUT FORMAT: You must output ONLY a valid JSON object matching this exact structure:
         {{
             "script": "The actual full text to be spoken...",
-            "keywords": ["aerial city skyline golden hour", "slow motion ocean waves", "dramatic sunrise mountain", "crowd walking busy street", "dark cinematic smoke rising"]
+            "keywords": ["scene1 keyword", "scene2 keyword", "scene3 keyword", "scene4 keyword", "scene5 keyword", "scene6 keyword", "scene7 keyword", "scene8 keyword"]
         }}
         """
 

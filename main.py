@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import argparse
 from dotenv import load_dotenv
 
@@ -11,17 +12,30 @@ from src.build_video import VideoBuilder
 from src.youtube_uploader import YouTubeUploader
 from src.music_fetcher import MusicFetcher
 from src.news_fetcher import NewsFetcher
+from select_topic import _load_used_topics, _save_used_topics
+
+VERSION = "3.10"
+
+def _mark_topic_used(topic: str):
+    """Record a topic in used_topics.json so it is never repeated."""
+    data = _load_used_topics()
+    used = data.setdefault("used", [])
+    if topic not in used:
+        used.append(topic)
+        _save_used_topics(data)
+        print(f"[TopicTracker] Marked as used ({len(used)} total)")
+
 
 def run_pipeline():
-    print("=== FACELESS VIDEO BOT PIPELINE STARTED (V3) ===")
-    
+    print(f"=== FACELESS VIDEO BOT v{VERSION} — PIPELINE STARTED ===")
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--topic', type=str, help='Override the topic from .env')
     parser.add_argument('--news', action='store_true', help='Fetch a live breaking news topic')
     parser.add_argument('--news-index', type=int, default=0,
                         help='Which news story to use (0=top, 1=second, 2=third)')
     args = parser.parse_args()
-    
+
     # 1. Setup & Config
     load_dotenv()
     if args.topic:
@@ -33,37 +47,38 @@ def run_pipeline():
     target_length = int(os.getenv("VIDEO_LENGTH_SECONDS", "45"))
     upload_enabled = os.getenv("UPLOAD_TO_YOUTUBE", "False").lower() in ("true", "1", "yes")
 
+    # Mark this topic as used so it never repeats
+    _mark_topic_used(topic)
+
     # Ensure working directories exist (required on fresh CI runners)
     os.makedirs("temp", exist_ok=True)
     os.makedirs("output", exist_ok=True)
 
-    print(f"\n[1/6] Generating Script & Scenes for topic: '{topic}'...")
+    print(f"\n[1/7] Generating Script & 8 Cinematic Scenes for topic: '{topic}'...")
     script_gen = ScriptGenerator()
     script_text, keywords = script_gen.generate_script(topic, length_seconds=target_length)
-    
+
     print("\n--- SCRIPT ---")
     print(script_text)
-    print("--- SCENES ---")
+    print(f"--- SCENES ({len(keywords)} keywords) ---")
     print(keywords)
     print("--------------\n")
 
     # 2. Audio Generation
-    print(f"\n[2/6] Generating Voiceover...")
+    print(f"\n[2/7] Generating Voiceover...")
     audio_gen = AudioGenerator()
     audio_file = "temp/temp_audio.mp3"
     audio_gen.generate_audio(script_text, output_file=audio_file)
 
-    # 3. Download Background Media
-    print(f"\n[3/6] Fetching Background Videos...")
+    # 3. Download Background Media (8 unique clips)
+    print(f"\n[3/7] Fetching {len(keywords)} Background Videos (full-HD, deduplicated)...")
     media_fetcher = MediaFetcher()
-    # It will fetch one video for each keyword the AI came up with!
     video_files = media_fetcher.fetch_background_videos(keywords, min_duration=5)
     if not video_files:
         raise RuntimeError("All Pexels video downloads failed. Cannot build video. Check PEXELS_API_KEY and API quota.")
 
     # 4. Download Background Music from Jamendo
-    print(f"\n[4/6] Fetching Background Music from Jamendo...")
-    # None indicates music fetch failed; video renders/uploads without track attribution.
+    print(f"\n[4/7] Fetching Background Music from Jamendo...")
     selected_music = None
     try:
         music_fetcher = MusicFetcher()
@@ -75,18 +90,19 @@ def run_pipeline():
     except Exception as e:
         print(f"[!] Music fetch failed (will render without music): {e}")
 
-    # 5. Build Final Video
-    print(f"\n[5/6] Rendering Final Video with Situational Clips & BGM...")
+    # 5. Build Final Video (cinematic Ken Burns + subtitles + high-quality encode)
+    print(f"\n[5/7] Rendering Final Video (Ken Burns effects, subtitles, CRF-18)...")
     video_builder = VideoBuilder()
     final_output = "output/final_short.mp4"
     video_builder.build_final_video(
         video_paths=video_files,
         audio_path=audio_file,
-        output_path=final_output
+        output_path=final_output,
+        script_text=script_text,
     )
 
     # 6. Upload to YouTube
-    print(f"\n[6/6] Checking YouTube Upload Status...")
+    print(f"\n[6/7] Checking YouTube Upload Status...")
     if upload_enabled:
         try:
             print("Upload is ENABLED! Connecting to YouTube...")
@@ -100,14 +116,14 @@ def run_pipeline():
 
             # --- Hashtags: from keywords + topic words + fixed viral tags ---
             topic_tags  = [w.strip().lower() for w in topic.replace("-", " ").split() if len(w) > 3]
-            scene_tags  = ["".join(k.split()).lower() for k in keywords]
+            scene_tags  = ["".join(k.split()).lower() for k in keywords[:5]]
             fixed_tags  = ["shorts", "shortsvideo", "viral", "trending", "facts",
                            "youtubeshorts", "reels", "shortsfeed"]
             all_hashtags = list(dict.fromkeys(
                 ["#" + t for t in (scene_tags + topic_tags + fixed_tags)]
-            ))[:15]   # YouTube allows up to 15 hashtags before penalising
+            ))[:15]
 
-            # --- Description: hook sentence + full script teaser + hashtags ---
+            # --- Description: hook + hashtags + music credit ---
             hook       = script_text[:150].rsplit(" ", 1)[0] + "..."
             hashtag_str = " ".join(all_hashtags)
             description = (
@@ -120,7 +136,7 @@ def run_pipeline():
                 track_name = selected_music.get("name", "Unknown Track")
                 artist_name = selected_music.get("artist_name", "Unknown Artist")
                 track_url = selected_music.get("shareurl", "")
-                music_credit = f"\n\n🎵 Music: {track_name} — {artist_name} (via Jamendo)"
+                music_credit = f"\n\n🎵 Music: {track_name} — {artist_name} (via Jamendo, CC BY)"
                 if track_url:
                     music_credit += f"\n{track_url}"
                 description += music_credit
@@ -142,7 +158,7 @@ def run_pipeline():
     else:
         print("Upload is DISABLED via .env file. Skipping upload so you can preview it locally!")
 
-    print(f"\n=== PIPELINE SUCCESS: '{final_output}' ===")
+    print(f"\n=== PIPELINE SUCCESS v{VERSION}: '{final_output}' ===")
 
     # 7. Cleanup temp folder
     print("\n[7/7] Cleaning up temporary processing files...")

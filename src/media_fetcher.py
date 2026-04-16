@@ -6,9 +6,14 @@ from dotenv import load_dotenv
 # When a keyword returns no Pexels results, broaden it by progressively
 # stripping words from the right until something matches.
 _GENERIC_FALLBACKS = [
-    "city skyline",
-    "nature landscape",
-    "abstract background",
+    "city skyline night cinematic",
+    "nature landscape aerial drone",
+    "abstract light particles dark",
+    "ocean waves aerial sunset",
+    "mountain fog morning light",
+    "street lights bokeh night",
+    "forest sunlight rays morning",
+    "rain drops window close up",
 ]
 
 class MediaFetcher:
@@ -17,50 +22,66 @@ class MediaFetcher:
         self.api_key = os.getenv("PEXELS_API_KEY")
         if not self.api_key or self.api_key == "your_pexels_api_key_here":
             raise ValueError("PEXELS_API_KEY is missing or not configured in .env")
-        
+
         self.headers = {
             "Authorization": self.api_key
         }
+        # Track video IDs already chosen in this session to avoid duplicates
+        self._used_video_ids = set()
 
     def _search_pexels(self, query, min_duration=5):
-        """Try Pexels search. Returns (video_url, True) on success, (None, False) on miss."""
+        """Try Pexels search. Returns (video_url, video_id, True) on success."""
         url = "https://api.pexels.com/videos/search"
         params = {
             "query": query,
             "orientation": "portrait",
             "size": "large",
-            "per_page": 30,
+            "per_page": 40,
             "page": random.randint(1, 3),
         }
         try:
             response = requests.get(url, headers=self.headers, params=params, timeout=15)
             if response.status_code != 200:
-                return None, False
+                return None, None, False
             data = response.json()
             videos = data.get("videos", [])
             if not videos:
-                return None, False
-            valid = [v for v in videos if v.get("duration", 0) >= min_duration] or videos
+                return None, None, False
+
+            # Filter: ≥min_duration AND not already used in this run
+            valid = [v for v in videos
+                     if v.get("duration", 0) >= min_duration
+                     and v.get("id") not in self._used_video_ids]
+            if not valid:
+                # Relax the dedup if nothing else available
+                valid = [v for v in videos if v.get("duration", 0) >= min_duration] or videos
+
             selected = random.choice(valid)
+            vid_id = selected.get("id")
             files = selected.get("video_files", [])
-            # Prefer HD files (>=720p height) then sort by resolution descending
+
+            # Prefer full-HD (≥1080p), then HD (≥720p), then anything
+            fhd_files = [f for f in files if f.get("height", 0) >= 1080]
             hd_files = [f for f in files if f.get("height", 0) >= 720]
-            chosen_pool = hd_files if hd_files else files
+            chosen_pool = fhd_files or hd_files or files
             chosen_pool.sort(key=lambda x: (x.get("width", 0) * x.get("height", 0)), reverse=True)
-            return chosen_pool[0]["link"], True
+            return chosen_pool[0]["link"], vid_id, True
         except Exception:
-            return None, False
+            return None, None, False
 
     def _find_video(self, keyword, index, min_duration=5):
         """
         Try progressively broader searches until a video is found:
-          1. Full keyword  (e.g. "military ships at sea")
-          2. First 2 words (e.g. "military ships")
-          3. First word    (e.g. "military")
-          4. Generic fallback keyed to index
+          1. Full keyword  (e.g. "military ships at sea dramatic")
+          2. First 3 words (e.g. "military ships at")
+          3. First 2 words (e.g. "military ships")
+          4. First word    (e.g. "military")
+          5. Generic cinematic fallback keyed to index
         """
         words = keyword.split()
         candidates = [keyword]
+        if len(words) >= 4:
+            candidates.append(" ".join(words[:3]))
         if len(words) >= 3:
             candidates.append(" ".join(words[:2]))
         if len(words) >= 2:
@@ -68,10 +89,11 @@ class MediaFetcher:
         candidates.append(_GENERIC_FALLBACKS[index % len(_GENERIC_FALLBACKS)])
 
         for attempt in candidates:
-            url, found = self._search_pexels(attempt, min_duration)
+            url, vid_id, found = self._search_pexels(attempt, min_duration)
             if found:
                 if attempt != keyword:
                     print(f"  (broadened search '{keyword}' → '{attempt}')")
+                self._used_video_ids.add(vid_id)
                 return url
         return None
 
@@ -79,6 +101,7 @@ class MediaFetcher:
         """
         Searches Pexels for a vertical video matching each keyword and downloads them.
         Falls back to broader terms so every slot always gets a relevant clip.
+        Deduplicates: no two scenes will use the same Pexels video.
         """
         downloaded_files = []
         for i, query in enumerate(keywords):
@@ -112,7 +135,7 @@ class MediaFetcher:
                         print(f"  [retry {attempt+1}] Download error: {e}")
                     else:
                         print(f"  [!] Failed to download slot {i+1} after 3 attempts: {e}")
-            
+
         return downloaded_files
 
 if __name__ == "__main__":
