@@ -99,6 +99,11 @@ class MediaFetcher:
                         for chunk in vid_resp.iter_content(chunk_size=65536):
                             if chunk:
                                 f.write(chunk)
+                    # Validate: file must be >10KB to be a real video
+                    if os.path.getsize(output_file) < 10240:
+                        print(f"  [!] Downloaded file too small ({os.path.getsize(output_file)} bytes), skipping slot {i+1}")
+                        os.remove(output_file)
+                        break
                     print(f"  [OK] Downloaded to {output_file}")
                     downloaded_files.append(output_file)
                     break

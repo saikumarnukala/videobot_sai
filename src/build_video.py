@@ -129,13 +129,25 @@ class VideoBuilder:
         
         # 1. Process Background Videos — resize to 1080×1920 and split evenly
         CROSSFADE = 0.5  # seconds of crossfade between clips
-        n_clips = max(len(video_paths), 1)
+        
+        # Load clips, skipping any that are corrupted/unreadable
+        loaded_clips = []
+        for path in video_paths:
+            try:
+                clip = VideoFileClip(path)
+                loaded_clips.append(clip)
+            except Exception as e:
+                print(f"[!] Skipping corrupt/unreadable clip: {path} ({e})")
+        
+        if not loaded_clips:
+            raise RuntimeError("No valid background clips could be loaded. Cannot build video.")
+        
+        n_clips = len(loaded_clips)
         # Each clip plays slightly longer to overlap with neighbours
         time_per_clip = audio_duration / n_clips + CROSSFADE
         
         processed_video_clips = []
-        for path in video_paths:
-            clip = VideoFileClip(path)
+        for clip in loaded_clips:
             clip = _resize_to_portrait(clip)
             clip = _loop_to_duration(clip, time_per_clip)
             processed_video_clips.append(clip)
