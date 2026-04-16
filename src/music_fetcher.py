@@ -89,7 +89,13 @@ class MusicFetcher:
             "include": "musicinfo",
             "audioformat": "mp31",  # standard mp3
             "order": "popularity_total",
-            "durationbetween": "60_300" # 1 to 5 minutes
+            "durationbetween": "60_300",  # 1 to 5 minutes
+            # CC license filters — only fetch tracks safe for commercial YouTube use:
+            # ccnc=0 excludes Non-Commercial tracks, ccsa=0 excludes ShareAlike,
+            # ccnd=0 excludes No-Derivatives. Result: only CC BY / CC0 tracks.
+            "ccnc": "0",
+            "ccsa": "0",
+            "ccnd": "0",
         }
 
         response = requests.get(url, params=params, timeout=10)
