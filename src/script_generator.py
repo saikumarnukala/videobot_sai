@@ -49,27 +49,43 @@ class ScriptGenerator:
     def _build_prompt(self, topic, length_seconds):
         word_count = int(length_seconds) * 3
         return f"""
-        You are an expert short-form video scriptwriter for YouTube Shorts and Instagram Reels.
-        Write a highly engaging, fast-paced script about: {topic}.
+        You are a world-class short-form video scriptwriter known for viral YouTube Shorts.
+        Write a cinematic, emotionally gripping script about: {topic}.
 
         The script should take exactly {length_seconds} seconds to read aloud (approximately {word_count} words).
 
-        CRITICAL RULES:
-        1. Start with a massive hook to grab attention in the first 3 seconds.
-        2. Keep sentences extremely short and punchy.
-        3. Do NOT include any stage directions like [Hook]. ONLY the spoken words.
-        4. You must ALSO generate exactly 3 background video search keywords.
-           These will be searched on Pexels stock video — so they MUST be generic, visual,
-           and physically filmable concepts (NOT political figures, flags, maps, or branded content).
-           Good examples: "ocean waves crashing", "city skyline night", "busy stock market traders",
-           "military ships at sea", "government building exterior", "crowd protest street",
-           "hands shaking deal", "news anchor speaking", "courtroom interior", "fire explosion".
-           Match the MOOD and THEME of the script, not the specific names or places.
+        SCRIPT STRUCTURE (follow this arc):
+        1. HOOK (first 3 seconds): Start with an irresistible question, shocking stat, or bold
+           contrarian statement that makes the viewer STOP scrolling immediately.
+        2. TENSION (next 60%): Build curiosity with rapid-fire revelations, mini-stories,
+           or "most people don't know" insights. Use emotional triggers — surprise, fear,
+           awe, or urgency. Vary sentence length for rhythm.
+        3. PAYOFF (final 20%): Deliver a powerful conclusion — a mindset shift, call to
+           action, or thought-provoking closer that makes people comment and share.
+
+        STYLE RULES:
+        - Write as if narrating a mini-documentary, NOT a listicle.
+        - Use vivid, sensory language ("imagine standing at the edge of…").
+        - Sentences should feel punchy and cinematic — mix short bursts with one longer
+          dramatic sentence for rhythm.
+        - Do NOT include stage directions, labels, or emojis. ONLY spoken words.
+
+        BACKGROUND VIDEO KEYWORDS:
+        Generate exactly 5 cinematic background video search terms.
+        These are searched on Pexels stock video, so they MUST be:
+        - Visually stunning and physically filmable (real footage, not concepts)
+        - Cinematic and high-production-feel (think drone shots, slow-motion, golden hour)
+        - Matched to the MOOD and EMOTION of each section of the script
+        - Generic enough to return results (no specific people, brands, flags, or maps)
+
+        Good examples: "aerial city skyline golden hour", "slow motion ocean waves crash",
+        "close up eye opening dramatic", "timelapse night sky stars", "crowd walking busy street slow motion",
+        "dramatic sunrise mountain peak", "dark smoke rising cinematic", "hands typing laptop close up".
 
         OUTPUT FORMAT: You must output ONLY a valid JSON object matching this exact structure:
         {{
             "script": "The actual full text to be spoken...",
-            "keywords": ["busy stock market traders", "military ships at sea", "government building exterior"]
+            "keywords": ["aerial city skyline golden hour", "slow motion ocean waves", "dramatic sunrise mountain", "crowd walking busy street", "dark cinematic smoke rising"]
         }}
         """
 

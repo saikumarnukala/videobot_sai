@@ -21,6 +21,7 @@ class MusicFetcher:
     def _map_topic_to_tags(self, topic: str) -> str:
         """
         Intelligently maps the video topic to Jamendo music tags.
+        Prioritises cinematic, high-production-value mood music.
         """
         topic_lower = topic.lower()
         
@@ -29,39 +30,43 @@ class MusicFetcher:
                                            "habit", "discipline", "stoic", "wisdom", "mindset",
                                            "billionaire", "routine", "intelligent", "best",
                                            "dominate", "win", "achieve", "powerful"]):
-            return "energetic,uplifting"
+            return "cinematic+energetic"
         # Money / business / finance topics
         elif any(w in topic_lower for w in ["money", "income", "invest", "wealth", "rich",
                                              "millionaire", "financial", "salary", "business",
                                              "brand", "passive", "hustle", "side", "earn",
                                              "profit", "budget", "negotiate"]):
-            return "corporate,uplifting"
+            return "cinematic+corporate"
         # Science / tech / facts / brain topics
         elif any(w in topic_lower for w in ["brain", "psychology", "facts", "history", "ancient",
                                              "civiliz", "quantum", "physics", "discover", "experiment",
                                              "secret", "hidden", "truth", "mind"]):
-            return "cinematic,electronic"
+            return "cinematic+mysterious"
         # Space / AI / future / tech topics
         elif any(w in topic_lower for w in ["space", "universe", "science", "tech", "ai",
                                              "future", "robot", "technology", "digital"]):
-            return "electronic,ambient"
+            return "cinematic+electronic"
         # Scary / danger / dark topics
         elif any(w in topic_lower for w in ["scary", "horror", "dark", "creepy", "danger",
                                              "scariest", "terrifying", "nightmare"]):
-            return "dark,suspense"
+            return "cinematic+dark"
         # Ocean / nature / travel topics
         elif any(w in topic_lower for w in ["ocean", "sea", "nature", "travel", "adventure",
                                              "explore", "deep", "forest", "mountain"]):
-            return "ambient,peaceful"
+            return "cinematic+ambient"
         # Calm / wellness topics
         elif any(w in topic_lower for w in ["calm", "meditat", "mindful", "relax", "peaceful"]):
-            return "ambient,peaceful"
+            return "cinematic+peaceful"
         # Happy / comedy topics
         elif any(w in topic_lower for w in ["happy", "funny", "comedy", "joy"]):
-            return "happy,pop"
+            return "cinematic+happy"
+        # News / politics / war / world events
+        elif any(w in topic_lower for w in ["news", "war", "politic", "election", "crisis",
+                                             "breaking", "world", "conflict", "govern"]):
+            return "cinematic+dramatic"
         else:
-            # Default: upbeat and positive
-            return "uplifting,instrumental"
+            # Default: cinematic and uplifting
+            return "cinematic+uplifting"
 
     def fetch_music(self, topic: str, output_file: str = "bg_music.mp3") -> str:
         """

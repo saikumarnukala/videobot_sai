@@ -128,25 +128,37 @@ class VideoBuilder:
         audio_duration = audio_clip.duration
         
         # 1. Process Background Videos — resize to 1080×1920 and split evenly
-        processed_video_clips = []
-        time_per_clip = audio_duration / max(len(video_paths), 1)
+        CROSSFADE = 0.5  # seconds of crossfade between clips
+        n_clips = max(len(video_paths), 1)
+        # Each clip plays slightly longer to overlap with neighbours
+        time_per_clip = audio_duration / n_clips + CROSSFADE
         
+        processed_video_clips = []
         for path in video_paths:
             clip = VideoFileClip(path)
             clip = _resize_to_portrait(clip)
             clip = _loop_to_duration(clip, time_per_clip)
             processed_video_clips.append(clip)
             
-        # Concatenate them all together sequentially
-        print("Concatenating situational background scenes...")
-        background_clip = concatenate_videoclips(processed_video_clips, method="compose")
+        # Concatenate with crossfade transitions for a cinematic feel
+        print("Concatenating background scenes with crossfade transitions...")
+        if len(processed_video_clips) > 1:
+            background_clip = concatenate_videoclips(
+                processed_video_clips, method="compose", padding=-CROSSFADE
+            )
+        else:
+            background_clip = processed_video_clips[0] if processed_video_clips else None
+        
+        # Trim to exact audio duration (crossfade padding can shift total length slightly)
+        if background_clip and background_clip.duration > audio_duration:
+            background_clip = background_clip.subclipped(0, audio_duration)
         
         # 2. Process Audio (Voiceover + Background Music)
         bgm_path = "temp/bg_music.mp3"
         final_audio = audio_clip
         if os.path.exists(bgm_path):
             print(f"Found {bgm_path}! Compositing background music with voiceover...")
-            bgm_volume = float(os.getenv("BGM_VOLUME", "0.08"))
+            bgm_volume = float(os.getenv("BGM_VOLUME", "0.12"))
             
             music_clip = AudioFileClip(bgm_path).with_effects([
                 afx.AudioLoop(duration=audio_duration),

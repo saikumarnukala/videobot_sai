@@ -28,8 +28,8 @@ class MediaFetcher:
         params = {
             "query": query,
             "orientation": "portrait",
-            "size": "medium",
-            "per_page": 15,
+            "size": "large",
+            "per_page": 30,
             "page": random.randint(1, 3),
         }
         try:
@@ -43,8 +43,11 @@ class MediaFetcher:
             valid = [v for v in videos if v.get("duration", 0) >= min_duration] or videos
             selected = random.choice(valid)
             files = selected.get("video_files", [])
-            files.sort(key=lambda x: (x.get("width", 0) * x.get("height", 0)), reverse=True)
-            return files[0]["link"], True
+            # Prefer HD files (>=720p height) then sort by resolution descending
+            hd_files = [f for f in files if f.get("height", 0) >= 720]
+            chosen_pool = hd_files if hd_files else files
+            chosen_pool.sort(key=lambda x: (x.get("width", 0) * x.get("height", 0)), reverse=True)
+            return chosen_pool[0]["link"], True
         except Exception:
             return None, False
 
