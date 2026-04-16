@@ -24,7 +24,6 @@ def run_pipeline():
     
     # 1. Setup & Config
     load_dotenv()
-    selected_music = None
     if args.topic:
         topic = args.topic
     elif args.news:
@@ -64,6 +63,7 @@ def run_pipeline():
 
     # 4. Download Background Music from Jamendo
     print(f"\n[4/6] Fetching Background Music from Jamendo...")
+    selected_music = None
     try:
         music_fetcher = MusicFetcher()
         music_fetcher.fetch_music(topic, output_file="temp/bg_music.mp3")

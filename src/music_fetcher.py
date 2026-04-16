@@ -109,8 +109,9 @@ class MusicFetcher:
         if not tracks:
             raise Exception(f"No music tracks found on Jamendo for tags: {tags}")
 
-        # Pick a random track from top results for variety
-        track = random.choice(tracks[:10])
+        # Pick a random track from top results for variety unless explicit IDs are enforced
+        candidate_tracks = tracks if self.allowed_track_ids else tracks[:10]
+        track = random.choice(candidate_tracks)
         audio_url = track["audio"]
         self.last_track = track
         
