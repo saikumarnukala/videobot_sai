@@ -1,5 +1,4 @@
 import os
-import json
 import math
 import numpy as np
 from pathlib import Path
@@ -121,7 +120,7 @@ class VideoBuilder:
     def __init__(self):
         pass
 
-    def build_final_video(self, video_paths: list, audio_path: str, subtitle_path=None, output_path="final_short.mp4"):
+    def build_final_video(self, video_paths: list, audio_path: str, output_path="final_short.mp4"):
         print(f"Loading {len(video_paths)} background clips...")
         print(f"Loading main audio: {audio_path}")
         
@@ -155,43 +154,8 @@ class VideoBuilder:
             ])
             final_audio = CompositeAudioClip([audio_clip, music_clip])
             
-        # 3. Add Subtitles — bottom-centre (standard for YouTube Shorts)
+        # 3. Subscribe CTA overlay (last 3 seconds)
         final_clips = [background_clip]
-        
-        if subtitle_path and os.path.exists(subtitle_path):
-            print("Adding dynamic word-by-word subtitles...")
-            with open(subtitle_path, 'r') as f:
-                subs = json.load(f)
-                
-            # Filter empty entries then group into 2-word blocks
-            subs = [s for s in subs if s.get('text', '').strip()]
-            groups = []
-            i = 0
-            while i < len(subs):
-                if i + 1 < len(subs):
-                    grp_text = subs[i]['text'].strip() + ' ' + subs[i+1]['text'].strip()
-                    grp_start = subs[i]['start']
-                    grp_end = subs[i+1]['end'] + 0.05
-                    i += 2
-                else:
-                    grp_text = subs[i]['text'].strip()
-                    grp_start = subs[i]['start']
-                    grp_end = subs[i]['end'] + 0.05
-                    i += 1
-                groups.append({'text': grp_text, 'start': grp_start, 'end': grp_end})
-
-            for grp in groups:
-                img_clip = _make_text_image_clip(
-                    grp['text'].upper(),
-                    font_size=72,
-                    duration=grp['end'] - grp['start'],
-                    start=grp['start'],
-                    max_width=900,
-                    y_position=int(TARGET_H * 0.72),
-                )
-                final_clips.append(img_clip)
-
-        # 4. Subscribe CTA overlay (last 3 seconds) — above subtitles
         cta_start = max(0, audio_duration - 3.0)
         cta_img_clip = _make_text_image_clip(
             "SUBSCRIBE FOR MORE",

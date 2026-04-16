@@ -44,11 +44,10 @@ def run_pipeline():
     print("--------------\n")
 
     # 2. Audio Generation
-    print(f"\n[2/6] Generating Voiceover & Subtitles...")
+    print(f"\n[2/6] Generating Voiceover...")
     audio_gen = AudioGenerator()
     audio_file = "temp/temp_audio.mp3"
-    subs_file = "temp/temp_subs.json"
-    audio_gen.generate_audio_and_subs(script_text, output_file=audio_file, subtitle_file=subs_file)
+    audio_gen.generate_audio(script_text, output_file=audio_file)
 
     # 3. Download Background Media
     print(f"\n[3/6] Fetching Background Videos...")
@@ -67,13 +66,12 @@ def run_pipeline():
         print(f"[!] Music fetch failed (will render without music): {e}")
 
     # 5. Build Final Video
-    print(f"\n[5/6] Rendering Final Video with Situational Clips, BGM & Subtitles...")
+    print(f"\n[5/6] Rendering Final Video with Situational Clips & BGM...")
     video_builder = VideoBuilder()
     final_output = "output/final_short.mp4"
     video_builder.build_final_video(
-        video_paths=video_files, 
-        audio_path=audio_file, 
-        subtitle_path=subs_file, 
+        video_paths=video_files,
+        audio_path=audio_file,
         output_path=final_output
     )
 

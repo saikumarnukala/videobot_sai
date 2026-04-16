@@ -1,8 +1,6 @@
 import os
 import asyncio
 import edge_tts
-import json
-from mutagen.mp3 import MP3
 from dotenv import load_dotenv
 
 class AudioGenerator:
@@ -10,50 +8,18 @@ class AudioGenerator:
         load_dotenv()
         self.voice = os.getenv("VOICE_NAME", "en-US-AndrewNeural")
 
-    async def _generate_audio_async(self, text, output_file, subtitle_file="temp_subs.json"):
+    async def _generate_audio_async(self, text, output_file):
         print(f"Generating audio using voice: {self.voice}...")
         
         max_retries = 3
         for attempt in range(max_retries):
             try:
                 communicate = edge_tts.Communicate(text, self.voice, rate="-15%")
-                subs_data = [] 
                 
                 with open(output_file, "wb") as file:
                     async for chunk in communicate.stream():
                         if chunk["type"] == "audio":
                             file.write(chunk["data"])
-                        elif chunk["type"] == "WordBoundary":
-                            # Only word-level boundaries (skip SentenceBoundary to prevent garbled subtitles)
-                            start_sec = chunk.get("offset", 0) / 10000000.0
-                            duration_sec = chunk.get("duration", 0) / 10000000.0
-                            end_sec = start_sec + duration_sec
-                            text_val = chunk.get("text", "")
-                            
-                            subs_data.append({
-                                "text": text_val,
-                                "start": start_sec,
-                                "end": end_sec
-                            })
-                            
-                with open(subtitle_file, "w") as f:
-                    json.dump(subs_data, f)
-
-                # If word boundaries were not returned (can happen after network retry),
-                # fall back to evenly distributing word timings from audio duration
-                if not subs_data and os.path.exists(output_file):
-                    print("[TTS] Word boundaries empty — generating estimated subtitle timings...")
-                    audio_dur = MP3(output_file).info.length
-                    words = [w for w in text.split() if w.strip()]
-                    if words and audio_dur > 0:
-                        word_dur = audio_dur / len(words)
-                        subs_data = [
-                            {"text": w, "start": round(i * word_dur, 3), "end": round((i + 1) * word_dur, 3)}
-                            for i, w in enumerate(words)
-                        ]
-                        with open(subtitle_file, "w") as f:
-                            json.dump(subs_data, f)
-                        print(f"[TTS] Estimated {len(subs_data)} word timings over {audio_dur:.1f}s")
 
                 # Success
                 return
@@ -65,22 +31,22 @@ class AudioGenerator:
                 print("Retrying in 2 seconds...")
                 await asyncio.sleep(2)
 
-    def generate_audio_and_subs(self, text, output_file="temp_audio.mp3", subtitle_file="temp_subs.json"):
+    def generate_audio(self, text, output_file="temp_audio.mp3"):
         # Priority 1 – ElevenLabs paid voice clone (best quality)
         if os.getenv("ELEVENLABS_API_KEY"):
             from src.elevenlabs_audio import ElevenLabsAudioGenerator
             gen = ElevenLabsAudioGenerator()
-            return gen.generate_audio_and_subs(text, output_file, subtitle_file)
+            return gen.generate_audio(text, output_file)
 
         # Priority 2 – Edge TTS (free, human-sounding neural voice, no local model needed)
-        asyncio.run(self._generate_audio_async(text, output_file, subtitle_file))
-        if os.path.exists(output_file) and os.path.exists(subtitle_file):
-            print(f"Audio and Subs successfully generated!")
-            return output_file, subtitle_file
+        asyncio.run(self._generate_audio_async(text, output_file))
+        if os.path.exists(output_file):
+            print(f"Audio successfully generated!")
+            return output_file
         else:
-            raise FileNotFoundError(f"Failed to generate {output_file} or {subtitle_file}")
+            raise FileNotFoundError(f"Failed to generate {output_file}")
 
 if __name__ == "__main__":
     generator = AudioGenerator()
     test_text = "Did you know that water makes up over seventy percent of the human brain? Subscribe for more wild facts!"
-    generator.generate_audio_and_subs(test_text, "test_audio.mp3", "test_subs.json")
+    generator.generate_audio(test_text, "test_audio.mp3")
