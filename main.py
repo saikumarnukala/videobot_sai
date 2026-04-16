@@ -63,11 +63,16 @@ def run_pipeline():
 
     # 4. Download Background Music from Jamendo
     print(f"\n[4/6] Fetching Background Music from Jamendo...")
+    # None means music fetch failed and video will render/upload without track attribution.
     selected_music = None
     try:
         music_fetcher = MusicFetcher()
-        music_fetcher.fetch_music(topic, output_file="temp/bg_music.mp3")
-        selected_music = music_fetcher.last_track
+        music_result = music_fetcher.fetch_music(
+            topic,
+            output_file="temp/bg_music.mp3",
+            return_track=True
+        )
+        selected_music = music_result.get("track")
     except Exception as e:
         print(f"[!] Music fetch failed (will render without music): {e}")
 

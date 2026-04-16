@@ -19,7 +19,6 @@ class MusicFetcher:
             raise ValueError("JAMENDO_CLIENT_ID is missing in .env! Get a free key at https://developer.jamendo.com/")
         allowed_ids_raw = os.getenv("JAMENDO_ALLOWED_TRACK_IDS", "")
         self.allowed_track_ids = {track_id.strip() for track_id in allowed_ids_raw.split(",") if track_id.strip()}
-        self.last_track = None
 
     def _map_topic_to_tags(self, topic: str) -> str:
         """
@@ -71,7 +70,7 @@ class MusicFetcher:
             # Default: cinematic and uplifting
             return "cinematic+uplifting"
 
-    def fetch_music(self, topic: str, output_file: str = "bg_music.mp3") -> str:
+    def fetch_music(self, topic: str, output_file: str = "bg_music.mp3", return_track: bool = False):
         """
         Downloads background music relevant to the video topic.
         Saves it as 'bg_music.mp3' ready for the video builder to pick up.
@@ -113,8 +112,6 @@ class MusicFetcher:
         candidate_tracks = tracks if self.allowed_track_ids else tracks[:10]
         track = random.choice(candidate_tracks)
         audio_url = track["audio"]
-        self.last_track = track
-        
         print(f"Found: '{track['name']}' by {track['artist_name']}")
         print(f"Downloading...")
 
@@ -128,6 +125,8 @@ class MusicFetcher:
                     f.write(chunk)
 
         print(f"Background music saved to '{output_file}'!")
+        if return_track:
+            return {"file_path": output_file, "track": track}
         return output_file
 
 
