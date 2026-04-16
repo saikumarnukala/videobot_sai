@@ -28,7 +28,7 @@ def get_current_slot() -> str:
         return "evening"
 
 
-def select_topic(slot: str) -> str:
+def select_topic(slot: str, run_number: int = 0) -> str:
     with open("topics.json", "r", encoding="utf-8") as f:
         topics = json.load(f)
 
@@ -36,9 +36,14 @@ def select_topic(slot: str) -> str:
     if not topic_list:
         raise ValueError(f"No topics found for slot: {slot}")
 
-    # Sequential round-robin: each topic used once before any repeats
-    days_elapsed = (date.today() - _EPOCH).days
-    index = days_elapsed % len(topic_list)
+    # Use github run_number (unique per pipeline run) as the index so every
+    # run picks a different topic even when multiple runs happen on the same day.
+    # Falls back to days_elapsed-based rotation when run locally (run_number=0).
+    if run_number > 0:
+        index = run_number % len(topic_list)
+    else:
+        days_elapsed = (date.today() - _EPOCH).days
+        index = days_elapsed % len(topic_list)
     return topic_list[index]
 
 
@@ -50,7 +55,13 @@ if __name__ == "__main__":
         default=None,
         help="Force a specific slot. Auto-detects from UTC hour if omitted.",
     )
+    parser.add_argument(
+        "--run-number",
+        type=int,
+        default=0,
+        help="GitHub Actions run_number (passed from workflow to ensure unique topic per run).",
+    )
     args = parser.parse_args()
 
     slot = args.slot or get_current_slot()
-    print(select_topic(slot))
+    print(select_topic(slot, run_number=args.run_number))

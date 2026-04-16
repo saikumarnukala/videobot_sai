@@ -121,7 +121,7 @@ jobs:
             echo "news_index=0" >> "$GITHUB_OUTPUT"
           elif [ -n "$OVERRIDE_SLOT" ]; then
             # Manual dispatch with a specific topic slot
-            TOPIC=$(python select_topic.py --slot "$OVERRIDE_SLOT")
+            TOPIC=$(python select_topic.py --slot "$OVERRIDE_SLOT" --run-number ${{ github.run_number }})
             echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
             echo "use_news=false" >> "$GITHUB_OUTPUT"
             echo "news_index=0" >> "$GITHUB_OUTPUT"
@@ -141,7 +141,7 @@ jobs:
               echo "use_news=true" >> "$GITHUB_OUTPUT"
               echo "news_index=2" >> "$GITHUB_OUTPUT"
             else
-              TOPIC=$(python select_topic.py)
+              TOPIC=$(python select_topic.py --run-number ${{ github.run_number }})
               echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
               echo "use_news=false" >> "$GITHUB_OUTPUT"
               echo "news_index=0" >> "$GITHUB_OUTPUT"
