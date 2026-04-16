@@ -13,6 +13,7 @@ more topics to topics.json.
 """
 import json
 import os
+import sys
 import argparse
 from datetime import date, datetime, timezone
 
@@ -77,7 +78,7 @@ def select_topic(slot: str, run_number: int = 0, mark_used: bool = False) -> str
         used_data.setdefault("used", []).append(chosen)
         _save_used_topics(used_data)
         print(f"[TopicSelect] Marked as used ({len(used_data['used'])} total used, "
-              f"{len(available)-1} remaining in '{slot}')")
+              f"{len(available)-1} remaining in '{slot}')", file=sys.stderr)
 
     return chosen
 
