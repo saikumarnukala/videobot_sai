@@ -63,7 +63,7 @@ def run_pipeline():
 
     # 4. Download Background Music from Jamendo
     print(f"\n[4/6] Fetching Background Music from Jamendo...")
-    # None means music fetch failed and video will render/upload without track attribution.
+    # None indicates music fetch failed; video renders/uploads without track attribution.
     selected_music = None
     try:
         music_fetcher = MusicFetcher()

@@ -73,7 +73,8 @@ class MusicFetcher:
     def fetch_music(self, topic: str, output_file: str = "bg_music.mp3") -> dict:
         """
         Downloads background music relevant to the video topic.
-        Saves it as 'bg_music.mp3' ready for the video builder to pick up.
+        Saves it to output_file and returns:
+        {"file_path": <downloaded mp3 path>, "track": <Jamendo track object>}
         """
         tags = self._map_topic_to_tags(topic)
         print(f"Downloading background music (tags: '{tags}')...")
