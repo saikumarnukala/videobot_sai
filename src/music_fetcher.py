@@ -17,6 +17,9 @@ class MusicFetcher:
         self.client_id = os.getenv("JAMENDO_CLIENT_ID")
         if not self.client_id or self.client_id == "your_jamendo_client_id_here":
             raise ValueError("JAMENDO_CLIENT_ID is missing in .env! Get a free key at https://developer.jamendo.com/")
+        allowed_ids_raw = os.getenv("JAMENDO_ALLOWED_TRACK_IDS", "")
+        self.allowed_track_ids = {track_id.strip() for track_id in allowed_ids_raw.split(",") if track_id.strip()}
+        self.last_track = None
 
     def _map_topic_to_tags(self, topic: str) -> str:
         """
@@ -95,12 +98,21 @@ class MusicFetcher:
         data = response.json()
         tracks = [t for t in data.get("results", []) if t.get("audio")]
 
+        if self.allowed_track_ids:
+            tracks = [t for t in tracks if str(t.get("id")) in self.allowed_track_ids]
+            if not tracks:
+                raise Exception(
+                    f"No Jamendo tracks matched JAMENDO_ALLOWED_TRACK_IDS for tags: {tags}. "
+                    "Please update JAMENDO_ALLOWED_TRACK_IDS with valid Jamendo track IDs."
+                )
+
         if not tracks:
             raise Exception(f"No music tracks found on Jamendo for tags: {tags}")
 
         # Pick a random track from top results for variety
         track = random.choice(tracks[:10])
         audio_url = track["audio"]
+        self.last_track = track
         
         print(f"Found: '{track['name']}' by {track['artist_name']}")
         print(f"Downloading...")
