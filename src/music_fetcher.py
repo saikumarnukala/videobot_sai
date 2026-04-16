@@ -1,6 +1,7 @@
 import os
 import random
 import requests
+from typing import Any, Dict
 from dotenv import load_dotenv
 
 class MusicFetcher:
@@ -70,11 +71,11 @@ class MusicFetcher:
             # Default: cinematic and uplifting
             return "cinematic+uplifting"
 
-    def fetch_music(self, topic: str, output_file: str = "bg_music.mp3") -> dict:
+    def fetch_music(self, topic: str, output_file: str = "bg_music.mp3") -> Dict[str, Any]:
         """
         Downloads background music relevant to the video topic.
-        Saves it to output_file and returns:
-        {"file_path": <downloaded mp3 path>, "track": <Jamendo track object>}
+        Saves it to output_file and returns a dictionary:
+        {"file_path": str, "track": dict}
         """
         tags = self._map_topic_to_tags(topic)
         print(f"Downloading background music (tags: '{tags}')...")
@@ -103,6 +104,7 @@ class MusicFetcher:
             if not tracks:
                 raise Exception(
                     f"No Jamendo tracks matched JAMENDO_ALLOWED_TRACK_IDS for tags: {tags}. "
+                    f"Allowed IDs: {sorted(self.allowed_track_ids)}. "
                     "Please update JAMENDO_ALLOWED_TRACK_IDS with valid Jamendo track IDs."
                 )
 
