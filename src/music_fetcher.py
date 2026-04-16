@@ -1,8 +1,34 @@
 import os
+import json
 import random
 import requests
 from typing import Any, Dict
 from dotenv import load_dotenv
+
+USED_TOPICS_FILE = "used_topics.json"
+
+
+def _load_used_music() -> set:
+    """Load the set of already-used Jamendo track IDs from the ledger."""
+    if os.path.exists(USED_TOPICS_FILE):
+        with open(USED_TOPICS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return {str(tid) for tid in data.get("used_music", [])}
+    return set()
+
+
+def _save_used_music(track_id: str):
+    """Append a track ID to the never-repeat music ledger."""
+    data = {}
+    if os.path.exists(USED_TOPICS_FILE):
+        with open(USED_TOPICS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    used = data.setdefault("used_music", [])
+    if str(track_id) not in [str(t) for t in used]:
+        used.append(str(track_id))
+        with open(USED_TOPICS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        print(f"[MusicTracker] Marked track {track_id} as used ({len(used)} total)")
 
 class MusicFetcher:
     """
@@ -84,7 +110,7 @@ class MusicFetcher:
         params = {
             "client_id": self.client_id,
             "format": "json",
-            "limit": 20,
+            "limit": 200,
             "tags": tags,
             "include": "musicinfo",
             "audioformat": "mp31",  # standard mp3
@@ -117,11 +143,18 @@ class MusicFetcher:
         if not tracks:
             raise Exception(f"No music tracks found on Jamendo for tags: {tags}")
 
+        # Exclude tracks already used in previous videos (never-repeat)
+        used_ids = _load_used_music()
+        fresh_tracks = [t for t in tracks if str(t.get("id")) not in used_ids]
+        if not fresh_tracks:
+            print(f"[Music] All {len(tracks)} tracks for '{tags}' already used — resetting pool")
+            fresh_tracks = tracks  # fallback: allow re-use rather than failing
+
         # Pick a random track from top results for variety unless explicit IDs are enforced
-        candidate_tracks = tracks if self.allowed_track_ids else tracks[:10]
+        candidate_tracks = fresh_tracks if self.allowed_track_ids else fresh_tracks[:10]
         track = random.choice(candidate_tracks)
         audio_url = track["audio"]
-        print(f"Found: '{track['name']}' by {track['artist_name']}")
+        print(f"Found: '{track['name']}' by {track['artist_name']} (ID: {track['id']})")
         print(f"Downloading...")
 
         audio_resp = requests.get(audio_url, stream=True, timeout=30)
@@ -132,6 +165,9 @@ class MusicFetcher:
             for chunk in audio_resp.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
+
+        # Mark this track as used so it's never picked again
+        _save_used_music(str(track["id"]))
 
         print(f"Background music saved to '{output_file}'!")
         return {"file_path": output_file, "track": track}
