@@ -35,40 +35,36 @@ def _apply_ken_burns(clip, preset=None):
     px, py = preset["pan"]
     dur = clip.duration
 
-    def make_frame_filter(get_frame):
-        def new_get_frame(t):
-            progress = t / dur if dur > 0 else 0
-            scale = ss + (es - ss) * progress
-            pan_x = px * progress
-            pan_y = py * progress
+    def kb_filter(get_frame, t):
+        progress = t / dur if dur > 0 else 0
+        scale = ss + (es - ss) * progress
+        pan_x = px * progress
+        pan_y = py * progress
 
-            frame = get_frame(t)
-            h, w = frame.shape[:2]
+        frame = get_frame(t)
+        h, w = frame.shape[:2]
 
-            # Calculate crop box
-            new_w = int(w / scale)
-            new_h = int(h / scale)
-            cx = w // 2 + int(pan_x * w)
-            cy = h // 2 + int(pan_y * h)
+        # Calculate crop box
+        new_w = int(w / scale)
+        new_h = int(h / scale)
+        cx = w // 2 + int(pan_x * w)
+        cy = h // 2 + int(pan_y * h)
 
-            x1 = max(0, cx - new_w // 2)
-            y1 = max(0, cy - new_h // 2)
-            x2 = min(w, x1 + new_w)
-            y2 = min(h, y1 + new_h)
-            # Re-clamp if we went off-edge
-            if x2 - x1 < new_w:
-                x1 = max(0, x2 - new_w)
-            if y2 - y1 < new_h:
-                y1 = max(0, y2 - new_h)
+        x1 = max(0, cx - new_w // 2)
+        y1 = max(0, cy - new_h // 2)
+        x2 = min(w, x1 + new_w)
+        y2 = min(h, y1 + new_h)
+        if x2 - x1 < new_w:
+            x1 = max(0, x2 - new_w)
+        if y2 - y1 < new_h:
+            y1 = max(0, y2 - new_h)
 
-            cropped = frame[y1:y2, x1:x2]
-            # Resize back to original dimensions using PIL for quality
-            img = Image.fromarray(cropped)
-            img = img.resize((w, h), Image.LANCZOS)
-            return np.array(img)
-        return new_get_frame
+        cropped = frame[y1:y2, x1:x2]
+        img = Image.fromarray(cropped)
+        img = img.resize((w, h), Image.LANCZOS)
+        return np.array(img)
 
-    new_clip = clip.transform(make_frame_filter)
+    new_clip = clip.transform(kb_filter)
     return new_clip
 
 
