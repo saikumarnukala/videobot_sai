@@ -63,9 +63,15 @@ def run_pipeline():
 
     # 4. Download Background Music from Jamendo
     print(f"\n[4/6] Fetching Background Music from Jamendo...")
+    # None indicates music fetch failed; video renders/uploads without track attribution.
+    selected_music = None
     try:
         music_fetcher = MusicFetcher()
-        music_fetcher.fetch_music(topic, output_file="temp/bg_music.mp3")
+        music_result = music_fetcher.fetch_music(
+            topic,
+            output_file="temp/bg_music.mp3"
+        )
+        selected_music = music_result.get("track")
     except Exception as e:
         print(f"[!] Music fetch failed (will render without music): {e}")
 
@@ -110,6 +116,14 @@ def run_pipeline():
                 f"───────────────────\n"
                 f"{hashtag_str}"
             )
+            if selected_music:
+                track_name = selected_music.get("name", "Unknown Track")
+                artist_name = selected_music.get("artist_name", "Unknown Artist")
+                track_url = selected_music.get("shareurl", "")
+                music_credit = f"\n\n🎵 Music: {track_name} — {artist_name} (via Jamendo)"
+                if track_url:
+                    music_credit += f"\n{track_url}"
+                description += music_credit
 
             # --- Tags array for YouTube API (plain words, no #) ---
             api_tags = [t.lstrip("#") for t in all_hashtags] + ["shortsvideo", "viralvideo"]

@@ -40,6 +40,7 @@ copy .env.example .env
 | `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/app/apikey) — Free |
 | `PEXELS_API_KEY` | [Pexels API](https://www.pexels.com/api/) — Free |
 | `JAMENDO_CLIENT_ID` | [Jamendo Developer](https://developer.jamendo.com/) — Free |
+| `JAMENDO_ALLOWED_TRACK_IDS` | Optional comma-separated Jamendo track IDs. If set, only these approved tracks are used. |
 | YouTube OAuth | Download `client_secrets.json` from [Google Cloud Console](https://console.cloud.google.com/) |
 
 ### 5. Run the pipeline

@@ -1,6 +1,7 @@
 import os
 import random
 import requests
+from typing import Any, Dict
 from dotenv import load_dotenv
 
 class MusicFetcher:
@@ -17,6 +18,8 @@ class MusicFetcher:
         self.client_id = os.getenv("JAMENDO_CLIENT_ID")
         if not self.client_id or self.client_id == "your_jamendo_client_id_here":
             raise ValueError("JAMENDO_CLIENT_ID is missing in .env! Get a free key at https://developer.jamendo.com/")
+        allowed_ids_raw = os.getenv("JAMENDO_ALLOWED_TRACK_IDS", "")
+        self.allowed_track_ids = {track_id.strip() for track_id in allowed_ids_raw.split(",") if track_id.strip()}
 
     def _map_topic_to_tags(self, topic: str) -> str:
         """
@@ -68,10 +71,11 @@ class MusicFetcher:
             # Default: cinematic and uplifting
             return "cinematic+uplifting"
 
-    def fetch_music(self, topic: str, output_file: str = "bg_music.mp3") -> str:
+    def fetch_music(self, topic: str, output_file: str = "bg_music.mp3") -> Dict[str, Any]:
         """
         Downloads background music relevant to the video topic.
-        Saves it as 'bg_music.mp3' ready for the video builder to pick up.
+        Saves it to output_file and returns a dictionary:
+        {"file_path": str, "track": dict}
         """
         tags = self._map_topic_to_tags(topic)
         print(f"Downloading background music (tags: '{tags}')...")
@@ -95,13 +99,22 @@ class MusicFetcher:
         data = response.json()
         tracks = [t for t in data.get("results", []) if t.get("audio")]
 
+        if self.allowed_track_ids:
+            tracks = [t for t in tracks if str(t.get("id")) in self.allowed_track_ids]
+            if not tracks:
+                raise Exception(
+                    f"No Jamendo tracks matched JAMENDO_ALLOWED_TRACK_IDS for tags: {tags}. "
+                    f"Allowed IDs: {sorted(self.allowed_track_ids)}. "
+                    "Please update JAMENDO_ALLOWED_TRACK_IDS with valid Jamendo track IDs."
+                )
+
         if not tracks:
             raise Exception(f"No music tracks found on Jamendo for tags: {tags}")
 
-        # Pick a random track from top results for variety
-        track = random.choice(tracks[:10])
+        # Pick a random track from top results for variety unless explicit IDs are enforced
+        candidate_tracks = tracks if self.allowed_track_ids else tracks[:10]
+        track = random.choice(candidate_tracks)
         audio_url = track["audio"]
-        
         print(f"Found: '{track['name']}' by {track['artist_name']}")
         print(f"Downloading...")
 
@@ -115,7 +128,7 @@ class MusicFetcher:
                     f.write(chunk)
 
         print(f"Background music saved to '{output_file}'!")
-        return output_file
+        return {"file_path": output_file, "track": track}
 
 
 if __name__ == "__main__":
