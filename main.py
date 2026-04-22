@@ -2,6 +2,8 @@ import os
 import sys
 import json
 import argparse
+import signal
+import subprocess
 from dotenv import load_dotenv
 
 # Import our custom modules
@@ -14,7 +16,7 @@ from src.music_fetcher import MusicFetcher
 from src.news_fetcher import NewsFetcher
 from select_topic import _load_used_topics, _save_used_topics
 
-VERSION = "3.10"
+VERSION = "3.11"
 
 def _mark_topic_used(topic: str):
     """Record a topic in used_topics.json so it is never repeated."""
@@ -173,6 +175,26 @@ def run_pipeline():
                 print(f"Warning: Could not delete {file_path}: {e}")
 
 if __name__ == "__main__":
+    # Setup signal handlers to ensure child processes (ffmpeg) are killed on abort
+    def _terminate_and_kill_ffmpeg(signum, frame):
+        print("[Main] Received termination signal, attempting to kill ffmpeg...", file=sys.stderr)
+        try:
+            if os.name == 'nt':
+                subprocess.run(["taskkill", "/F", "/T", "/IM", "ffmpeg.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                subprocess.run(["pkill", "-f", "ffmpeg"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+        sys.exit(1)
+
+    try:
+        signal.signal(signal.SIGINT, _terminate_and_kill_ffmpeg)
+        if hasattr(signal, 'SIGTERM'):
+            signal.signal(signal.SIGTERM, _terminate_and_kill_ffmpeg)
+    except Exception:
+        # Signal setup might fail on some platforms; ignore and continue
+        pass
+
     try:
         run_pipeline()
     except Exception as e:

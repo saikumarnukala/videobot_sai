@@ -2,6 +2,9 @@ import os
 import math
 import random
 import numpy as np
+import signal
+import subprocess
+import sys
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from moviepy import VideoFileClip, AudioFileClip, CompositeAudioClip, vfx, afx, ImageClip, CompositeVideoClip, concatenate_videoclips
@@ -66,6 +69,32 @@ def _apply_ken_burns(clip, preset=None):
 
     new_clip = clip.transform(kb_filter)
     return new_clip
+
+
+# Helper: kill ffmpeg processes (used when Jenkins aborts the job)
+def _kill_ffmpeg_processes():
+    try:
+        if os.name == 'nt':
+            subprocess.run(['taskkill', '/F', '/T', '/IM', 'ffmpeg.exe'], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            subprocess.run(['pkill', '-f', 'ffmpeg'], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+
+# Register signal handlers early so long-running renders can be interrupted cleanly
+def _signal_handler(signum, frame):
+    print('[VideoBuilder] Received termination signal, killing ffmpeg...', file=sys.stderr)
+    _kill_ffmpeg_processes()
+    sys.exit(1)
+
+try:
+    signal.signal(signal.SIGINT, _signal_handler)
+    if hasattr(signal, 'SIGTERM'):
+        signal.signal(signal.SIGTERM, _signal_handler)
+except Exception:
+    # Signal support may be limited on some platforms
+    pass
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -329,20 +358,29 @@ class VideoBuilder:
         # Use medium preset for much better quality (only ~2x slower than ultrafast)
         render_preset = os.getenv("RENDER_PRESET", "medium")
         print(f"Rendering final video (preset={render_preset}). This may take a few minutes...")
-        final_video.write_videofile(
-            output_path,
-            fps=30,
-            codec="libx264",
-            audio_codec="aac",
-            preset=render_preset,
-            bitrate="8M",
-            threads=4,
-            ffmpeg_params=[
-                "-crf", "18",        # high-quality constant rate factor
-                "-pix_fmt", "yuv420p",
-                "-movflags", "+faststart",  # web-optimised: metadata at start
-            ],
-        )
+        try:
+            final_video.write_videofile(
+                output_path,
+                fps=30,
+                codec="libx264",
+                audio_codec="aac",
+                preset=render_preset,
+                bitrate="8M",
+                threads=4,
+                ffmpeg_params=[
+                    "-crf", "18",        # high-quality constant rate factor
+                    "-pix_fmt", "yuv420p",
+                    "-movflags", "+faststart",  # web-optimised: metadata at start
+                ],
+            )
+        except (KeyboardInterrupt, SystemExit):
+            print('[VideoBuilder] Render interrupted. Killing ffmpeg and aborting.', file=sys.stderr)
+            _kill_ffmpeg_processes()
+            raise
+        except Exception:
+            # Ensure ffmpeg doesn't linger if moviepy/ffmpeg errors out
+            _kill_ffmpeg_processes()
+            raise
 
         # Cleanup
         background_clip.close()
