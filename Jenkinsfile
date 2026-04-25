@@ -63,7 +63,9 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                checkout scm
+                // Explicitly check out the code since 'checkout scm' only works if the Jenkinsfile 
+                // is loaded via the "Pipeline script from SCM" option.
+                git url: 'https://github.com/saikumarnukala/videobot_sai.git', branch: 'main'
             }
         }
 
