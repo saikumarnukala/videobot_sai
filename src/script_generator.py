@@ -1,46 +1,18 @@
 import os
 import json
+import sys
 from dotenv import load_dotenv
-
-# Quota / server errors that should trigger fallback instead of crashing
-_QUOTA_SIGNALS = ["429", "503", "RESOURCE_EXHAUSTED", "overloaded", "quota",
-                  "rate_limit", "rate limit", "too many requests"]
-
-def _is_quota_error(err: str) -> bool:
-    low = err.lower()
-    return any(s.lower() in low for s in _QUOTA_SIGNALS)
 
 
 class ScriptGenerator:
     def __init__(self):
         load_dotenv()
-
-        # --- Gemini ---
-        self.gemini_key  = os.getenv("GEMINI_API_KEY")
-        self.model_name  = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-        self.gemini_client = None
-        if self.gemini_key and self.gemini_key != "your_gemini_api_key_here":
-            from google import genai
-            self.gemini_client = genai.Client(api_key=self.gemini_key)
-
-        # --- GitHub Copilot (Models API) ---
-        self.github_token = os.getenv("GITHUB_TOKEN")
-        self.github_model = os.getenv("GITHUB_COPILOT_MODEL", "gpt-4o")
-
         # --- Groq (free, 14 400 req/day) ---
         self.groq_key   = os.getenv("GROQ_API_KEY")
         self.groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
-        backends = [
-            self.gemini_client,
-            self.github_token,
-            self.groq_key,
-        ]
-        if not any(backends):
-            raise ValueError(
-                "No AI backend available. Set at least one of: "
-                "GEMINI_API_KEY, GITHUB_TOKEN, GROQ_API_KEY in .env"
-            )
+        if not self.groq_key:
+            raise ValueError("GROQ_API_KEY is missing in .env")
 
     # ------------------------------------------------------------------ #
     #  Shared helpers                                                      #
@@ -48,58 +20,75 @@ class ScriptGenerator:
 
     def _build_prompt(self, topic, length_seconds):
         word_count = int(length_seconds) * 3
-        return f"""
-        You are an elite-tier short-form video scriptwriter responsible for scripts
-        that consistently generate 1M+ views on YouTube Shorts. 
-        Write a cinematic, emotionally gripping script about: {topic}.
+        return f"""You are a world-class YouTube Shorts scriptwriter whose videos consistently get 10M+ views and convert 5%+ of viewers to subscribers. Your specialty is creating "unskippable" content that hooks viewers in the first 2 seconds and keeps them watching until the end.
 
-        The script should take exactly {length_seconds} seconds to read aloud (approximately {word_count} words).
+TOPIC: {topic}
+VIDEO LENGTH: {length_seconds} seconds ({word_count} words)
 
-        SCRIPT STRUCTURE (follow this arc precisely):
-        1. HOOK (first 3 seconds): Open with a pattern interrupt — a shocking stat,
-           bold contrarian claim, or impossible-sounding question that forces the viewer
-           to STOP scrolling. The first sentence decides if 95% of viewers stay or leave.
-        2. TENSION BUILD (next 40%): Layer rapid-fire revelations using the "open loop"
-           technique — introduce a mystery or promise, delay the answer. Use vivid sensory
-           language. Mix 3-word punchy sentences with one longer dramatic sentence for rhythm.
-           Include at least one "most people don't know this" or "here's where it gets crazy" moment.
-        3. CLIMAX (next 30%): Deliver the most shocking, valuable, or emotional insight.
-           Make the viewer feel something — awe, urgency, fear, or inspiration. This is
-           the moment they screenshot or share.
-        4. PAYOFF & CTA (final 10%): End with a thought-provoking one-liner that lingers
-           in the mind. Then a natural call to action: "follow for more" woven into the
-           narrative, NOT a generic ask.
+## UNSKIPPABLE SCRIPT STRUCTURE (FOLLOW PRECISELY):
 
-        STYLE RULES:
-        - Write as if narrating a cinematic mini-documentary, NOT a listicle or blog post.
-        - Use vivid, sensory language ("imagine standing at the edge of…").
-        - Vary rhythm: short bursts. Then a longer dramatic sentence that builds tension.
-        - Use rhetorical questions sparingly but powerfully.
-        - Do NOT include stage directions, labels, timestamps, or emojis. ONLY spoken words.
-        - Do NOT use filler phrases like "in this video" or "today we're going to talk about".
+### 1. ATOMIC HOOK (0-3 seconds) - MUST STOP THE SCROLL
+- Start with a **PATTERN INTERRUPT**: shocking statistic, bold contrarian claim, or impossible question
+- First sentence MUST create an "information gap" - viewer MUST watch to resolve curiosity
+- Examples: "What if I told you [surprising fact about {topic}]?", "Stop everything. This changes everything about {topic}.", "97% of people get {topic} wrong. Here's why."
+- **Emotional trigger**: Create urgency, shock, or FOMO (Fear Of Missing Out)
 
-        BACKGROUND VIDEO KEYWORDS:
-        Generate exactly 8 cinematic background video search terms (one per scene change).
-        These are searched on Pexels stock video, so they MUST be:
-        - Visually stunning and physically filmable (real footage, not abstract concepts)
-        - Cinematic and high-production-feel (drone shots, slow-motion, golden hour, macro)
-        - Each keyword MUST be different — no two scenes should look similar
-        - Matched to the MOOD and EMOTION of each section of the script
-        - Generic enough to return results (no specific people, brands, flags, or maps)
-        - 3-5 words each, descriptive and visual
+### 2. CURIOSITY STACKING (3-18 seconds) - BUILD TENSION
+- Introduce 3 rapid-fire "curiosity gaps" - questions or mysteries that MUST be answered
+- Use the "BUT WAIT" technique: reveal something, then add "but here's what nobody tells you"
+- Include social proof: "Experts at Harvard discovered...", "A leaked document reveals..."
+- **Emotional mix**: 70% curiosity, 20% surprise, 10% anticipation
+- Sentence rhythm: Short. Punchy. Then a longer dramatic sentence that builds tension.
 
-        Good examples: "aerial city skyline golden hour", "slow motion ocean waves crash",
-        "close up eye opening dramatic", "timelapse night sky stars milkyway",
-        "crowd walking busy street slow motion", "dramatic sunrise mountain peak",
-        "dark smoke rising cinematic", "hands typing laptop close up cinematic",
-        "rain drops window close up", "forest fog morning light rays".
+### 3. VALUE BOMB (18-32 seconds) - DELIVER THE PAYOFF
+- Reveal the most valuable, shocking, or emotional insight
+- Make the viewer feel: "I can't believe I didn't know this before"
+- Include at least one "mind-blowing" fact that's shareable/screenshotable
+- **Emotional peak**: Create awe, inspiration, or "aha moment"
+- Use vivid sensory language: "Picture this...", "Imagine feeling..."
 
-        OUTPUT FORMAT: You must output ONLY a valid JSON object matching this exact structure:
-        {{
-            "script": "The actual full text to be spoken...",
-            "keywords": ["scene1 keyword", "scene2 keyword", "scene3 keyword", "scene4 keyword", "scene5 keyword", "scene6 keyword", "scene7 keyword", "scene8 keyword"]
-        }}
-        """
+### 4. SUBSCRIBER CONVERSION (32-45 seconds) - GROW THE CHANNEL
+- **Natural CTA**: Weave "follow for more" into the narrative, NOT a generic ask
+- Create content promise: "Tomorrow, I'll reveal [related intriguing topic about {topic}]"
+- Use "we" language to build community: "We're uncovering secrets together"
+- End with a thought-provoking one-liner that lingers in the mind
+- **Final emotional trigger**: Hope, belonging, or anticipation for next video
+
+## VIRAL TECHNIQUES (MUST INCLUDE):
+- **The 3-Second Rule**: If viewer isn't hooked in 3 seconds, they scroll
+- **Open Loop Mastery**: Introduce mystery early, resolve late
+- **Emotional Rollercoaster**: Mix curiosity -> surprise -> awe -> belonging
+- **Social Currency**: Give viewer "bragging rights" knowledge to share
+- **Pattern Interrupts**: Break expected YouTube patterns constantly
+
+## WRITING STYLE:
+- Write as a cinematic documentary narrator (Morgan Freeman meets action movie trailer)
+- Use vivid, sensory language: "The air crackles with energy as..."
+- Vary sentence length for musical rhythm
+- NO filler phrases ("in this video", "today we'll talk about")
+- NO stage directions, timestamps, or emojis
+- ONLY spoken words - every word must earn its place
+
+## BACKGROUND VIDEO KEYWORDS:
+Generate exactly 8 cinematic background video search terms for Pexels stock footage:
+1. **Hook scene** (0-3s): Dramatic, attention-grabbing visual
+2-7. **Curiosity scenes** (3-32s): Visual metaphors for each curiosity gap
+8. **CTA scene** (32-45s): Inspiring, forward-looking visual
+
+Each keyword MUST be:
+- Visually stunning and filmable (real footage, not abstract)
+- Cinematic (drone shots, slow-motion, golden hour, macro)
+- Emotionally matched to script section
+- Generic enough for stock footage (no specific people/brands)
+- 3-5 words, descriptive and visual
+
+## OUTPUT FORMAT (JSON ONLY):
+{{
+    "script": "The full script text...",
+    "keywords": ["scene1 keyword", "scene2 keyword", "scene3 keyword", "scene4 keyword", "scene5 keyword", "scene6 keyword", "scene7 keyword", "scene8 keyword"]
+}}
+
+Remember: Every viewer who finishes should think "I need to subscribe to see what's next." """
 
     def _parse_response(self, text):
         text = text.strip()
@@ -116,81 +105,29 @@ class ScriptGenerator:
     #  Backend implementations                                            #
     # ------------------------------------------------------------------ #
 
-    def _try_gemini(self, prompt):
-        response = self.gemini_client.models.generate_content(
-            model=self.model_name, contents=prompt
-        )
-        return self._parse_response(response.text)
-
-    def _try_github_copilot(self, prompt):
-        from openai import OpenAI
-        client = OpenAI(
-            base_url="https://models.inference.ai.azure.com",
-            api_key=self.github_token,
-        )
-        response = client.chat.completions.create(
-            model=self.github_model,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return self._parse_response(response.choices[0].message.content)
-
-    def _try_groq(self, prompt):
-        from openai import OpenAI
-        client = OpenAI(
-            base_url="https://api.groq.com/openai/v1",
-            api_key=self.groq_key,
-        )
-        response = client.chat.completions.create(
-            model=self.groq_model,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return self._parse_response(response.choices[0].message.content)
-
     # ------------------------------------------------------------------ #
-    #  Main entry point with waterfall fallback                           #
+    #  Backend implementation                                             #
     # ------------------------------------------------------------------ #
 
     def generate_script(self, topic, length_seconds=45):
-        """
-        Waterfall fallback order:
-          1. Gemini  (paid / free tier)
-          2. GitHub Copilot Models API  (150 req/day free with Copilot licence)
-          3. Groq  (14 400 req/day, free, ~2 s response)
-        """
+        """Generates script using Groq exclusively."""
         prompt = self._build_prompt(topic, length_seconds)
-        print(f"Generating script & scenes for topic: '{topic}'...")
+        print(f"Generating script via Groq for topic: '{topic}'...")
 
-        backends = []
-
-        if self.gemini_client:
-            backends.append(("Gemini",         self._try_gemini))
-        if self.github_token:
-            backends.append(("GitHub Copilot", self._try_github_copilot))
-        if self.groq_key:
-            backends.append(("Groq",           self._try_groq))
-
-        last_err = None
-        for name, fn in backends:
-            try:
-                result = fn(prompt)
-                if name != "Gemini":
-                    print(f"[ScriptGen] [OK] Script generated via {name}")
-                return result
-            except Exception as e:
-                err = str(e)
-                if _is_quota_error(err) or name in ("GitHub Copilot", "Groq", "Ollama"):
-                    print(f"[ScriptGen] {name} unavailable: {err[:100].strip()}")
-                    next_idx = [n for n, _ in backends].index(name) + 1
-                    if next_idx < len(backends):
-                        print(f"[ScriptGen] Falling back to {backends[next_idx][0]}...")
-                    last_err = e
-                else:
-                    raise
-
-        raise RuntimeError(
-            f"All AI backends exhausted. Last error: {last_err}\n"
-            "Options: enable Gemini billing, check GITHUB_TOKEN, or check GROQ_API_KEY"
-        )
+        from openai import OpenAI
+        try:
+            client = OpenAI(
+                base_url="https://api.groq.com/openai/v1",
+                api_key=self.groq_key,
+            )
+            response = client.chat.completions.create(
+                model=self.groq_model,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return self._parse_response(response.choices[0].message.content)
+        except Exception as e:
+            print(f"[ScriptGen] Groq Error: {e}")
+            raise RuntimeError(f"Script generation failed via Groq: {e}")
 
 if __name__ == "__main__":
     # Test execution

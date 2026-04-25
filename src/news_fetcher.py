@@ -48,7 +48,7 @@ class NewsFetcher:
                             seen.add(key)
                             candidates.append(clean)
             except Exception as exc:
-                print(f"[News] Feed {feed_url} failed: {exc}. Trying next…")
+                print(f"[News] Feed {feed_url} failed: {exc}. Trying next...")
                 continue
 
         if not candidates:

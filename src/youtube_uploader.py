@@ -43,7 +43,12 @@ class YouTubeUploader:
 
     def upload_short(self, file_path, title, description, category_id="22", privacy_status=None, tags=None):
         if privacy_status is None:
-            privacy_status = os.getenv("YOUTUBE_PRIVACY", "public")
+            privacy_status = (os.getenv("YOUTUBE_PRIVACY_STATUS") or os.getenv("YOUTUBE_PRIVACY") or "public").lower()
+        
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"ERROR: Video file not found: {file_path}")
+        if os.path.getsize(file_path) == 0:
+            raise ValueError(f"ERROR: Video file is empty: {file_path}")
         if tags is None:
             tags = ["shorts", "shortsfeed", "viral"]
         youtube = self.authenticate()
@@ -73,10 +78,24 @@ class YouTubeUploader:
         )
         
         response = None
-        while response is None:
-            status, response = request.next_chunk()
-            if status:
-                print(f"Uploaded {int(status.progress() * 100)}%")
+        try:
+            while response is None:
+                status, response = request.next_chunk()
+                if status:
+                    print(f"Uploaded {int(status.progress() * 100)}%")
                 
+        except googleapiclient.errors.HttpError as e:
+            error_details = e.content.decode()
+            if "quotaExceeded" in error_details:
+                print("ERROR: YouTube API Quota Exceeded! You can only upload about 6 videos per day with default limits.")
+            elif "insufficientPermissions" in error_details:
+                print("ERROR: Insufficient Permissions. Your token might not have the 'youtube.upload' scope.")
+            else:
+                print(f"ERROR: YouTube API returned an error: {e}")
+            raise e
+        except Exception as e:
+            print(f"ERROR: An unexpected error occurred during upload: {e}")
+            raise e
+        
         print(f"Upload Complete! Video published with ID: {response['id']}")
         return response['id']

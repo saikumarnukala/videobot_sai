@@ -4,6 +4,8 @@ import json
 import argparse
 import signal
 import subprocess
+import time
+import gc
 from dotenv import load_dotenv
 
 # Import our custom modules
@@ -112,7 +114,10 @@ def run_pipeline():
 
             # --- Title: clean, punchy, max 70 chars (YouTube limit is 100) ---
             raw_title = topic.title()
-            video_title = f"{raw_title} #Shorts"
+            if "#Shorts" in raw_title:
+                video_title = raw_title
+            else:
+                video_title = f"{raw_title} #Shorts"
             if len(video_title) > 70:
                 video_title = f"{raw_title[:65]}... #Shorts"
 
@@ -156,7 +161,7 @@ def run_pipeline():
                 tags=api_tags
             )
         except Exception as e:
-            print(f"YouTube Upload Failed (Is your client_secrets.json missing?): {e}")
+            print(f"YouTube Upload Failed! Check your quota or client_secrets.json/token.json: {e}")
     else:
         print("Upload is DISABLED via .env file. Skipping upload so you can preview it locally!")
 
@@ -165,14 +170,39 @@ def run_pipeline():
     # 7. Cleanup temp folder
     print("\n[7/7] Cleaning up temporary processing files...")
     temp_dir = "temp"
+    # Ensure ffmpeg subprocesses are terminated before attempting deletes (defensive)
+    try:
+        if os.name == 'nt':
+            subprocess.run(["taskkill", "/F", "/T", "/IM", "ffmpeg.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            subprocess.run(["pkill", "-f", "ffmpeg"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+    # Force garbage collection to close any lingering file handles from MoviePy
+    try:
+        gc.collect()
+        time.sleep(0.1)
+    except Exception:
+        pass
+
     if os.path.exists(temp_dir):
         for file in os.listdir(temp_dir):
             file_path = os.path.join(temp_dir, file)
-            try:
-                if os.path.isfile(file_path):
+            if not os.path.isfile(file_path):
+                continue
+            deleted = False
+            # Retry deletes a few times to allow OS to release file handles
+            for attempt in range(3):
+                try:
                     os.remove(file_path)
-            except Exception as e:
-                print(f"Warning: Could not delete {file_path}: {e}")
+                    deleted = True
+                    break
+                except Exception as e:
+                    if attempt < 2:
+                        time.sleep(0.5)
+                    else:
+                        print(f"Warning: Could not delete {file_path}: {e}")
 
 if __name__ == "__main__":
     # Setup signal handlers to ensure child processes (ffmpeg) are killed on abort

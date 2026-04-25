@@ -50,3 +50,9 @@ __pycache__/
 .idea/
 *.DS_Store
 Thumbs.db
+.jenkins_venv/
+*_wvf_snd.mp4
+jenkins_tts_test.mp3
+jenkins_test_pipeline.groovy
+*.mp3
+*.mp4

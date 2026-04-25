@@ -5,7 +5,6 @@
 //  Runs on 6 schedules per day and posts a YouTube Short automatically.
 //
 //  REQUIRED Jenkins Credentials:
-//  GEMINI_API_KEY               - Secret Text
 //  PEXELS_API_KEY               - Secret Text
 //  JAMENDO_CLIENT_ID            - Secret Text
 //  YOUTUBE_CLIENT_SECRETS_JSON  - Secret Text
@@ -58,13 +57,20 @@ pipeline {
         EDGE_VOICE           = 'ko-KR-HyunsuMultilingualNeural'
         MAX_RETRIES          = '3'
         VOLUME_BOOST         = '+50%'
-        WORKSPACE_DIR        = 'C:\\Users\\saikumar\\Desktop\\faceless' // Point to your actual code directory
+        WORKSPACE_DIR        = "${env.WORKSPACE}" // Uses the actual Jenkins job workspace path
     }
 
     stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
         stage('Initialize') {
             steps {
                 echo "Running pipeline in workspace: ${env.WORKSPACE_DIR}"
+                bat 'dir'
             }
         }
 
@@ -180,7 +186,6 @@ pipeline {
             steps {
                 dir(env.WORKSPACE_DIR) {
                     withCredentials([
-                        string(credentialsId: 'GEMINI_API_KEY',    variable: 'GEMINI_API_KEY'),
                         string(credentialsId: 'PEXELS_API_KEY',    variable: 'PEXELS_API_KEY'),
                         string(credentialsId: 'JAMENDO_CLIENT_ID', variable: 'JAMENDO_CLIENT_ID'),
                         string(credentialsId: 'GROQ_API_KEY',      variable: 'GROQ_API_KEY')

@@ -1,7 +1,17 @@
 import os
+import socket
 import requests
 import random
 from dotenv import load_dotenv
+
+# ── Force IPv4 for all outbound HTTP requests ─────────────────────────────────
+# Prevents "Network unreachable" / connection-reset errors in environments where
+# IPv6 routing is broken (Jenkins agents, Docker on Windows, WSL, etc.).
+_orig_getaddrinfo = socket.getaddrinfo
+def _ipv4_only(host, port, family=0, type=0, proto=0, flags=0):
+    return _orig_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+socket.getaddrinfo = _ipv4_only
+# ─────────────────────────────────────────────────────────────────────────────
 
 # When a keyword returns no Pexels results, broaden it by progressively
 # stripping words from the right until something matches.

@@ -38,6 +38,21 @@ def _apply_ken_burns(clip, preset=None):
     px, py = preset["pan"]
     dur = clip.duration
 
+    # Check for available faster resizing methods
+    _USE_OPENCV = False
+    
+    try:
+        import cv2
+        _USE_OPENCV = True
+    except ImportError:
+        pass
+
+    # Log which resizing method will be used
+    if _USE_OPENCV:
+        print(f"  Ken Burns: Using OpenCV for fast resizing")
+    else:
+        print(f"  Ken Burns: Using PIL BILINEAR resizing (optimized)")
+
     def kb_filter(get_frame, t):
         progress = t / dur if dur > 0 else 0
         scale = ss + (es - ss) * progress
@@ -63,9 +78,18 @@ def _apply_ken_burns(clip, preset=None):
             y1 = max(0, y2 - new_h)
 
         cropped = frame[y1:y2, x1:x2]
-        img = Image.fromarray(cropped)
-        img = img.resize((w, h), Image.LANCZOS)
-        return np.array(img)
+        
+        # Use fastest available resizing method
+        # Based on performance tests: OpenCV > PIL BILINEAR > scipy
+        if _USE_OPENCV:
+            # OpenCV is the fastest option
+            resized = cv2.resize(cropped, (w, h), interpolation=cv2.INTER_LINEAR)
+            return resized
+        else:
+            # Default to PIL BILINEAR (faster than LANCZOS and scipy)
+            img = Image.fromarray(cropped)
+            img = img.resize((w, h), Image.BILINEAR)
+            return np.array(img)
 
     new_clip = clip.transform(kb_filter)
     return new_clip
@@ -382,18 +406,63 @@ class VideoBuilder:
             _kill_ffmpeg_processes()
             raise
 
-        # Cleanup
-        background_clip.close()
-        audio_clip.close()
-        if os.path.exists(bgm_path) and 'music_clip' in dir():
+        # Cleanup - attempt to close all MoviePy readers/clip objects to release file handles
+        try:
+            # Close the final composite/video objects first
+            if 'final_video' in locals():
+                try:
+                    final_video.close()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        try:
+            if 'final_audio' in locals():
+                try:
+                    final_audio.close()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        try:
+            if 'music_clip' in locals():
+                try:
+                    music_clip.close()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        try:
+            if 'audio_clip' in locals():
+                try:
+                    audio_clip.close()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Close processed clips and original loaded clips to free file handles
+        for c in processed_video_clips:
             try:
-                music_clip.close()
-                final_audio.close()
+                c.close()
             except Exception:
                 pass
-        for c in processed_video_clips:
-            c.close()
-        composite_video.close()
+        for c in loaded_clips:
+            try:
+                c.close()
+            except Exception:
+                pass
+
+        try:
+            composite_video.close()
+        except Exception:
+            pass
+
+        # As a last-resort ensure ffmpeg processes are not lingering
+        _kill_ffmpeg_processes()
 
         print(f"Successfully generated final video: {output_path}")
         return output_path
