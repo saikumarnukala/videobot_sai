@@ -69,43 +69,43 @@ class MusicFetcher:
                                            "habit", "discipline", "stoic", "wisdom", "mindset",
                                            "billionaire", "routine", "intelligent", "best",
                                            "dominate", "win", "achieve", "powerful"]):
-            return "cinematic+energetic"
+            return "cinematic,energetic"
         # Money / business / finance topics
         elif any(w in topic_lower for w in ["money", "income", "invest", "wealth", "rich",
                                              "millionaire", "financial", "salary", "business",
                                              "brand", "passive", "hustle", "side", "earn",
                                              "profit", "budget", "negotiate"]):
-            return "cinematic+corporate"
+            return "cinematic,corporate"
         # Science / tech / facts / brain topics
         elif any(w in topic_lower for w in ["brain", "psychology", "facts", "history", "ancient",
                                              "civiliz", "quantum", "physics", "discover", "experiment",
                                              "secret", "hidden", "truth", "mind"]):
-            return "cinematic+mysterious"
+            return "cinematic,mysterious"
         # Space / AI / future / tech topics
         elif any(w in topic_lower for w in ["space", "universe", "science", "tech", "ai",
                                              "future", "robot", "technology", "digital"]):
-            return "cinematic+electronic"
+            return "cinematic,electronic"
         # Scary / danger / dark topics
         elif any(w in topic_lower for w in ["scary", "horror", "dark", "creepy", "danger",
                                              "scariest", "terrifying", "nightmare"]):
-            return "cinematic+dark"
+            return "cinematic,dark"
         # Ocean / nature / travel topics
         elif any(w in topic_lower for w in ["ocean", "sea", "nature", "travel", "adventure",
                                              "explore", "deep", "forest", "mountain"]):
-            return "cinematic+ambient"
+            return "cinematic,ambient"
         # Calm / wellness topics
         elif any(w in topic_lower for w in ["calm", "meditat", "mindful", "relax", "peaceful"]):
-            return "cinematic+peaceful"
+            return "cinematic,peaceful"
         # Happy / comedy topics
         elif any(w in topic_lower for w in ["happy", "funny", "comedy", "joy"]):
-            return "cinematic+happy"
+            return "cinematic,happy"
         # News / politics / war / world events
         elif any(w in topic_lower for w in ["news", "war", "politic", "election", "crisis",
                                              "breaking", "world", "conflict", "govern"]):
-            return "cinematic+dramatic"
+            return "cinematic,dramatic"
         else:
             # Default: cinematic and uplifting
-            return "cinematic+uplifting"
+            return "cinematic,uplifting"
 
     def fetch_music(self, topic: str, output_file: str = "bg_music.mp3") -> Dict[str, Any]:
         """
@@ -117,29 +117,36 @@ class MusicFetcher:
         print(f"Downloading background music (tags: '{tags}')...")
 
         url = "https://api.jamendo.com/v3.0/tracks/"
-        params = {
+        base_params = {
             "client_id": self.client_id,
             "format": "json",
             "limit": 200,
-            "tags": tags,
             "include": "musicinfo",
-            "audioformat": "mp31",  # standard mp3
+            "audioformat": "mp31",
             "order": "popularity_total",
-            "durationbetween": "60_300",  # 1 to 5 minutes
-            # CC license filters — only fetch tracks safe for commercial YouTube use:
-            # ccnc=0 excludes Non-Commercial tracks, ccsa=0 excludes ShareAlike,
-            # ccnd=0 excludes No-Derivatives. Result: only CC BY / CC0 tracks.
+            "durationbetween": "60_300",
             "ccnc": "0",
             "ccsa": "0",
             "ccnd": "0",
         }
 
-        response = requests.get(url, params=params, timeout=10)
-        if response.status_code != 200:
-            raise Exception(f"Jamendo API error {response.status_code}: {response.text}")
+        # Try progressively broader tag combinations so we never fail completely
+        tag_attempts = [tags, "cinematic", "pop", ""]
+        tracks = []
+        for attempt_tags in tag_attempts:
+            params = {**base_params, "tags": attempt_tags}
+            response = requests.get(url, params=params, timeout=10)
+            if response.status_code != 200:
+                continue
+            data = response.json()
+            tracks = [t for t in data.get("results", []) if t.get("audio")]
+            if tracks:
+                if attempt_tags != tags:
+                    print(f"  (broadened tags '{tags}' -> '{attempt_tags}')")
+                break
 
-        data = response.json()
-        tracks = [t for t in data.get("results", []) if t.get("audio")]
+        if not tracks:
+            raise Exception(f"Jamendo API returned no tracks for any tag combination. Last tried: '{attempt_tags}'")
 
         if self.allowed_track_ids:
             tracks = [t for t in tracks if str(t.get("id")) in self.allowed_track_ids]
@@ -149,9 +156,6 @@ class MusicFetcher:
                     f"Allowed IDs: {sorted(self.allowed_track_ids)}. "
                     "Please update JAMENDO_ALLOWED_TRACK_IDS with valid Jamendo track IDs."
                 )
-
-        if not tracks:
-            raise Exception(f"No music tracks found on Jamendo for tags: {tags}")
 
         # Exclude tracks already used in previous videos (never-repeat)
         used_ids = _load_used_music()
