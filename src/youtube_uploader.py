@@ -15,29 +15,41 @@ class YouTubeUploader:
         self.credentials = None
 
     def authenticate(self):
-        # The file token.json stores the user's access and refresh tokens.
         if os.path.exists('token.json'):
             print("Found existing token.json, attempting to authenticate...")
             self.credentials = Credentials.from_authorized_user_file('token.json', self.scopes)
-        
-        # If there are no (valid) credentials available, let the user log in.
+
         if not self.credentials or not self.credentials.valid:
             if self.credentials and self.credentials.expired and self.credentials.refresh_token:
                 print("Refreshing expired YouTube access token...")
-                self.credentials.refresh(Request())
-            else:
+                try:
+                    self.credentials.refresh(Request())
+                except Exception as e:
+                    print(f"Token refresh failed: {e}")
+                    self.credentials = None
+
+            if not self.credentials or not self.credentials.valid:
                 if not os.path.exists(self.client_secrets_file):
-                    raise FileNotFoundError(f"ERROR: {self.client_secrets_file} is missing! You MUST download the JSON file from Google Cloud.")
-                
-                print(f"No existing token. Opening browser for first-time YouTube verification...")
+                    raise FileNotFoundError(
+                        f"ERROR: {self.client_secrets_file} is missing! "
+                        "You MUST download the JSON file from Google Cloud."
+                    )
+                # Detect headless / CI environment where browser flow cannot work
+                if os.getenv("CI", "false").lower() in ("true", "1"):
+                    raise RuntimeError(
+                        "YouTube token is missing/invalid in CI. "
+                        "Generate token.json locally with `python src/youtube_uploader.py` "
+                        "and add it as a GitHub secret (YOUTUBE_TOKEN_JSON)."
+                    )
+                print("No existing token. Opening browser for first-time YouTube verification...")
                 flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
                     self.client_secrets_file, self.scopes)
                 self.credentials = flow.run_local_server(port=0)
-                
-            # Save the credentials for the next run (so the automation works seamlessly forever after)
+
+            # Save credentials for next run
             with open('token.json', 'w') as token:
                 token.write(self.credentials.to_json())
-                
+
         return googleapiclient.discovery.build(
             self.api_service_name, self.api_version, credentials=self.credentials)
 

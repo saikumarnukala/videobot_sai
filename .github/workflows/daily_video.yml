@@ -1,0 +1,152 @@
+name: Daily Faceless Video Bot
+
+on:
+  schedule:
+    - cron: '0 6 * * *'    # News #1    – 6:00 AM UTC  → top breaking story
+    - cron: '0 8 * * *'    # Topic #1   – 8:00 AM UTC  → morning topic
+    - cron: '0 11 * * *'   # News #2    – 11:00 AM UTC → second breaking story
+    - cron: '0 13 * * *'   # Topic #2   – 1:00 PM UTC  → afternoon topic
+    - cron: '0 16 * * *'   # News #3    – 4:00 PM UTC  → third breaking story
+    - cron: '0 19 * * *'   # Topic #3   – 7:00 PM UTC  → evening topic
+
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: 'Time slot (morning / afternoon / evening / news1 / news2 / news3)'
+        required: false
+        default: ''
+      topic:
+        description: 'Specific topic override (leave blank to auto-select)'
+        required: false
+        default: ''
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  generate-and-upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip --quiet
+          pip install -r requirements.txt --quiet
+
+      - name: Restore YouTube credentials
+        env:
+          CLIENT_SECRETS: ${{ secrets.YOUTUBE_CLIENT_SECRETS_JSON }}
+          TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+        run: |
+          printf '%s' "$CLIENT_SECRETS" > client_secrets.json
+          printf '%s' "$TOKEN_JSON" > token.json
+
+      - name: Select topic for this run
+        id: topic_select
+        run: |
+          OVERRIDE_TOPIC="${{ github.event.inputs.topic }}"
+          OVERRIDE_SLOT="${{ github.event.inputs.slot }}"
+
+          if [ -n "$OVERRIDE_TOPIC" ]; then
+            echo "topic=$OVERRIDE_TOPIC" >> "$GITHUB_OUTPUT"
+            echo "use_news=false" >> "$GITHUB_OUTPUT"
+            echo "news_index=0" >> "$GITHUB_OUTPUT"
+          elif [ "$OVERRIDE_SLOT" = "news1" ]; then
+            echo "topic=" >> "$GITHUB_OUTPUT"
+            echo "use_news=true" >> "$GITHUB_OUTPUT"
+            echo "news_index=0" >> "$GITHUB_OUTPUT"
+          elif [ "$OVERRIDE_SLOT" = "news2" ]; then
+            echo "topic=" >> "$GITHUB_OUTPUT"
+            echo "use_news=true" >> "$GITHUB_OUTPUT"
+            echo "news_index=1" >> "$GITHUB_OUTPUT"
+          elif [ "$OVERRIDE_SLOT" = "news3" ]; then
+            echo "topic=" >> "$GITHUB_OUTPUT"
+            echo "use_news=true" >> "$GITHUB_OUTPUT"
+            echo "news_index=2" >> "$GITHUB_OUTPUT"
+          elif [ "$OVERRIDE_SLOT" = "news" ]; then
+            echo "topic=" >> "$GITHUB_OUTPUT"
+            echo "use_news=true" >> "$GITHUB_OUTPUT"
+            echo "news_index=0" >> "$GITHUB_OUTPUT"
+          elif [ -n "$OVERRIDE_SLOT" ]; then
+            TOPIC=$(python select_topic.py --slot "$OVERRIDE_SLOT" --run-number ${{ github.run_number }} --mark-used)
+            echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
+            echo "use_news=false" >> "$GITHUB_OUTPUT"
+            echo "news_index=0" >> "$GITHUB_OUTPUT"
+          else
+            HOUR=$(date -u +%H)
+            if [ "$HOUR" = "06" ]; then
+              echo "topic=" >> "$GITHUB_OUTPUT"
+              echo "use_news=true" >> "$GITHUB_OUTPUT"
+              echo "news_index=0" >> "$GITHUB_OUTPUT"
+            elif [ "$HOUR" = "11" ]; then
+              echo "topic=" >> "$GITHUB_OUTPUT"
+              echo "use_news=true" >> "$GITHUB_OUTPUT"
+              echo "news_index=1" >> "$GITHUB_OUTPUT"
+            elif [ "$HOUR" = "16" ]; then
+              echo "topic=" >> "$GITHUB_OUTPUT"
+              echo "use_news=true" >> "$GITHUB_OUTPUT"
+              echo "news_index=2" >> "$GITHUB_OUTPUT"
+            else
+              TOPIC=$(python select_topic.py --run-number ${{ github.run_number }} --mark-used)
+              echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
+              echo "use_news=false" >> "$GITHUB_OUTPUT"
+              echo "news_index=0" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Generate video and upload to YouTube
+        env:
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          JAMENDO_CLIENT_ID: ${{ secrets.JAMENDO_CLIENT_ID }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          UPLOAD_TO_YOUTUBE: "true"
+          VIDEO_LENGTH_SECONDS: "55"
+          RENDER_PRESET: "ultrafast"
+          YOUTUBE_PRIVACY: ${{ secrets.YOUTUBE_PRIVACY || 'public' }}
+          GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'llama-3.3-70b-versatile' }}
+          EDGE_VOICE: ${{ secrets.EDGE_VOICE || 'ko-KR-HyunsuMultilingualNeural' }}
+          MAX_RETRIES: "3"
+          VOLUME_BOOST: "+50%"
+          ENABLE_KEN_BURNS: "false"
+        run: |
+          if [ "${{ steps.topic_select.outputs.use_news }}" = "true" ]; then
+            python main.py --news --news-index ${{ steps.topic_select.outputs.news_index }}
+          else
+            python main.py --topic "${{ steps.topic_select.outputs.topic }}"
+          fi
+
+      - name: Commit used_topics.json
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -f used_topics.json ]; then
+            git add used_topics.json
+            git diff --cached --quiet || (git commit -m "chore: update used_topics.json [skip ci]" && git push)
+          fi
+
+      - name: Clean up temp files
+        if: always()
+        run: |
+          rm -f temp_audio.mp3 temp_subs.json bg_music.mp3 final_short.mp4
+          rm -f temp_bg_*.mp4 token.json client_secrets.json

@@ -1,6 +1,4 @@
-google-genai
 openai
-# groq uses openai client — no extra package needed
 edge-tts
 moviepy
 requests
@@ -9,8 +7,5 @@ google-auth-oauthlib
 google-auth-httplib2
 python-dotenv
 feedparser
-elevenlabs
-mutagen
-TTS; python_version < "3.12"
-f5-tts; python_version >= "3.12"
-soundfile
+Pillow
+numpy

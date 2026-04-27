@@ -6,12 +6,31 @@ import signal
 import subprocess
 import sys
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont
 from moviepy import VideoFileClip, AudioFileClip, CompositeAudioClip, vfx, afx, ImageClip, CompositeVideoClip, concatenate_videoclips
 
 # Resolve font path: use bundled font so it works on Linux (GitHub Actions) and Windows
 _ASSETS_DIR = Path(__file__).parent.parent / "assets"
 FONT_PATH = str(_ASSETS_DIR / "impact.ttf")
+
+# Fallback system fonts for CI environments where bundled font is missing
+_SYSTEM_FONTS = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+    "/System/Library/Fonts/Helvetica.ttc",
+    "C:/Windows/Fonts/arialbd.ttf",
+]
+
+def _resolve_font():
+    if os.path.exists(FONT_PATH):
+        return FONT_PATH
+    for f in _SYSTEM_FONTS:
+        if os.path.exists(f):
+            return f
+    return FONT_PATH
+
+FONT_PATH = _resolve_font()
 
 # YouTube Shorts target resolution (9:16 portrait)
 TARGET_W, TARGET_H = 1080, 1920
@@ -31,6 +50,9 @@ _KB_PRESETS = [
 
 def _apply_ken_burns(clip, preset=None):
     """Apply a cinematic slow zoom/pan (Ken Burns) to the clip."""
+    if os.getenv("ENABLE_KEN_BURNS", "true").lower() not in ("true", "1", "yes"):
+        return clip
+
     if preset is None:
         preset = random.choice(_KB_PRESETS)
     ss = preset["start_scale"]
@@ -40,14 +62,12 @@ def _apply_ken_burns(clip, preset=None):
 
     # Check for available faster resizing methods
     _USE_OPENCV = False
-    
     try:
         import cv2
         _USE_OPENCV = True
     except ImportError:
         pass
 
-    # Log which resizing method will be used
     if _USE_OPENCV:
         print(f"  Ken Burns: Using OpenCV for fast resizing")
     else:
@@ -62,7 +82,6 @@ def _apply_ken_burns(clip, preset=None):
         frame = get_frame(t)
         h, w = frame.shape[:2]
 
-        # Calculate crop box
         new_w = int(w / scale)
         new_h = int(h / scale)
         cx = w // 2 + int(pan_x * w)
@@ -78,15 +97,11 @@ def _apply_ken_burns(clip, preset=None):
             y1 = max(0, y2 - new_h)
 
         cropped = frame[y1:y2, x1:x2]
-        
-        # Use fastest available resizing method
-        # Based on performance tests: OpenCV > PIL BILINEAR > scipy
+
         if _USE_OPENCV:
-            # OpenCV is the fastest option
             resized = cv2.resize(cropped, (w, h), interpolation=cv2.INTER_LINEAR)
             return resized
         else:
-            # Default to PIL BILINEAR (faster than LANCZOS and scipy)
             img = Image.fromarray(cropped)
             img = img.resize((w, h), Image.BILINEAR)
             return np.array(img)
