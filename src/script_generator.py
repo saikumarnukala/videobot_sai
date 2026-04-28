@@ -98,7 +98,25 @@ Remember: Every viewer who finishes should think "I need to subscribe to see wha
             text = text[3:]
         if text.endswith("```"):
             text = text[:-3]
-        data = json.loads(text.strip())
+        text = text.strip()
+
+        # Strip invalid control characters that break json.loads
+        # (0x00-0x1F except tab=0x09, newline=0x0A, carriage-return=0x0D)
+        cleaned = "".join(
+            ch for ch in text
+            if ord(ch) >= 0x20 or ch in "\t\n\r"
+        )
+
+        try:
+            data = json.loads(cleaned)
+        except json.JSONDecodeError as e:
+            # Fallback: try to extract JSON via regex if braces are malformed
+            import re
+            match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+            if match:
+                data = json.loads(match.group(0))
+            else:
+                raise e
         return data["script"], data["keywords"]
 
     # ------------------------------------------------------------------ #
