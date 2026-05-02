@@ -2,12 +2,8 @@ name: Daily Faceless Video Bot
 
 on:
   schedule:
-    - cron: '0 6 * * *'    # News #1    – 6:00 AM UTC  → top breaking story
-    - cron: '0 8 * * *'    # Topic #1   – 8:00 AM UTC  → morning topic
-    - cron: '0 11 * * *'   # News #2    – 11:00 AM UTC → second breaking story
-    - cron: '0 13 * * *'   # Topic #2   – 1:00 PM UTC  → afternoon topic
-    - cron: '0 16 * * *'   # News #3    – 4:00 PM UTC  → third breaking story
-    - cron: '0 19 * * *'   # Topic #3   – 7:00 PM UTC  → evening topic
+    - cron: '0 2 * * *'    # Slot 1 – 2:00 AM UTC = 7:30 AM IST  → morning news
+    - cron: '0 15 * * *'   # Slot 2 – 3:00 PM UTC = 8:30 PM IST  → evening topic
 
   workflow_dispatch:
     inputs:
@@ -97,19 +93,13 @@ jobs:
             echo "news_index=0" >> "$GITHUB_OUTPUT"
           else
             HOUR=$(date -u +%H)
-            if [ "$HOUR" = "06" ]; then
+            if [ "$HOUR" = "02" ]; then
+              # Morning slot → news
               echo "topic=" >> "$GITHUB_OUTPUT"
               echo "use_news=true" >> "$GITHUB_OUTPUT"
               echo "news_index=0" >> "$GITHUB_OUTPUT"
-            elif [ "$HOUR" = "11" ]; then
-              echo "topic=" >> "$GITHUB_OUTPUT"
-              echo "use_news=true" >> "$GITHUB_OUTPUT"
-              echo "news_index=1" >> "$GITHUB_OUTPUT"
-            elif [ "$HOUR" = "16" ]; then
-              echo "topic=" >> "$GITHUB_OUTPUT"
-              echo "use_news=true" >> "$GITHUB_OUTPUT"
-              echo "news_index=2" >> "$GITHUB_OUTPUT"
             else
+              # Evening slot → topic
               TOPIC=$(python select_topic.py --run-number ${{ github.run_number }} --mark-used)
               echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
               echo "use_news=false" >> "$GITHUB_OUTPUT"
