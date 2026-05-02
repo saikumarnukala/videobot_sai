@@ -135,7 +135,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           if [ -f used_topics.json ]; then
             git add used_topics.json
-            git diff --cached --quiet || (git commit -m "chore: update used_topics.json [skip ci]" && git push)
+            git diff --cached --quiet || (git commit -m "chore: update used_topics.json [skip ci]" && git pull --rebase origin main && git push)
           fi
 
       - name: Clean up temp files
