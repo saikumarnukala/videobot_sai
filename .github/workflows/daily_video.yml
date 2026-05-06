@@ -2,8 +2,7 @@ name: Daily Faceless Video Bot
 
 on:
   schedule:
-    - cron: '0 2 * * *'    # Slot 1 – 2:00 AM UTC = 7:30 AM IST  → morning news
-    - cron: '0 15 * * *'   # Slot 2 – 3:00 PM UTC = 8:30 PM IST  → evening topic
+    - cron: '0 18 * * *'   # 2:00 PM EDT / 11:00 AM PDT  → USA afternoon peak
 
   workflow_dispatch:
     inputs:
