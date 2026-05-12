@@ -14,7 +14,37 @@ class YouTubeUploader:
         self.api_version = "v3"
         self.credentials = None
 
+    def _build_credentials_from_env(self):
+        """Build OAuth2 credentials from env vars — no token.json needed in CI."""
+        client_id = os.getenv("YOUTUBE_CLIENT_ID")
+        client_secret = os.getenv("YOUTUBE_CLIENT_SECRET")
+        refresh_token = os.getenv("YOUTUBE_REFRESH_TOKEN")
+        if not (client_id and client_secret and refresh_token):
+            return None
+        creds = Credentials(
+            token=None,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=client_id,
+            client_secret=client_secret,
+            scopes=self.scopes,
+        )
+        creds.refresh(Request())
+        return creds
+
     def authenticate(self):
+        # 1. Try env var credentials first (CI-safe, no expiry issues)
+        try:
+            env_creds = self._build_credentials_from_env()
+            if env_creds and env_creds.valid:
+                print("Authenticated via YOUTUBE_CLIENT_ID/SECRET/REFRESH_TOKEN env vars.")
+                self.credentials = env_creds
+                return googleapiclient.discovery.build(
+                    self.api_service_name, self.api_version, credentials=self.credentials)
+        except Exception as e:
+            print(f"Env var auth failed, falling back to token.json: {e}")
+
+        # 2. Fall back to token.json
         if os.path.exists('token.json'):
             print("Found existing token.json, attempting to authenticate...")
             self.credentials = Credentials.from_authorized_user_file('token.json', self.scopes)
@@ -29,24 +59,23 @@ class YouTubeUploader:
                     self.credentials = None
 
             if not self.credentials or not self.credentials.valid:
+                if os.getenv("CI", "false").lower() in ("true", "1"):
+                    raise RuntimeError(
+                        "YouTube credentials are missing or expired in CI. "
+                        "Set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, and YOUTUBE_REFRESH_TOKEN "
+                        "as GitHub secrets (run scripts/get_youtube_token.py locally to obtain them)."
+                    )
                 if not os.path.exists(self.client_secrets_file):
                     raise FileNotFoundError(
                         f"ERROR: {self.client_secrets_file} is missing! "
-                        "You MUST download the JSON file from Google Cloud."
-                    )
-                # Detect headless / CI environment where browser flow cannot work
-                if os.getenv("CI", "false").lower() in ("true", "1"):
-                    raise RuntimeError(
-                        "YouTube token is missing/invalid in CI. "
-                        "Generate token.json locally with `python src/youtube_uploader.py` "
-                        "and add it as a GitHub secret (YOUTUBE_TOKEN_JSON)."
+                        "Download it from Google Cloud Console."
                     )
                 print("No existing token. Opening browser for first-time YouTube verification...")
                 flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
                     self.client_secrets_file, self.scopes)
                 self.credentials = flow.run_local_server(port=0)
 
-            # Save credentials for next run
+            # Save credentials for next local run
             with open('token.json', 'w') as token:
                 token.write(self.credentials.to_json())
 

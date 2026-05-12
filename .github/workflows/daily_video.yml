@@ -51,13 +51,11 @@ jobs:
           python -m pip install --upgrade pip --quiet
           pip install -r requirements.txt --quiet
 
-      - name: Restore YouTube credentials
+      - name: Restore YouTube client secrets
         env:
           CLIENT_SECRETS: ${{ secrets.YOUTUBE_CLIENT_SECRETS_JSON }}
-          TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
         run: |
           printf '%s' "$CLIENT_SECRETS" > client_secrets.json
-          printf '%s' "$TOKEN_JSON" > token.json
 
       - name: Select topic for this run
         id: topic_select
@@ -111,6 +109,9 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           JAMENDO_CLIENT_ID: ${{ secrets.JAMENDO_CLIENT_ID }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
           UPLOAD_TO_YOUTUBE: "true"
           VIDEO_LENGTH_SECONDS: "55"
           RENDER_PRESET: "ultrafast"
