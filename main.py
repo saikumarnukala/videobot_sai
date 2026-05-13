@@ -60,7 +60,7 @@ def run_pipeline():
 
     print(f"\n[1/7] Generating Script & 8 Cinematic Scenes for topic: '{topic}'...")
     script_gen = ScriptGenerator()
-    script_text, keywords = script_gen.generate_script(topic, length_seconds=target_length)
+    script_text, keywords, llm_title = script_gen.generate_script(topic, length_seconds=target_length)
 
     print("\n--- SCRIPT ---")
     print(script_text)
@@ -112,14 +112,11 @@ def run_pipeline():
             print("Upload is ENABLED! Connecting to YouTube...")
             uploader = YouTubeUploader()
 
-            # --- Title: clean, punchy, max 70 chars (YouTube limit is 100) ---
-            raw_title = topic.title()
-            if "#Shorts" in raw_title:
-                video_title = raw_title
-            else:
-                video_title = f"{raw_title} #Shorts"
-            if len(video_title) > 70:
-                video_title = f"{raw_title[:65]}... #Shorts"
+            # --- Title: use LLM-generated hook title, fall back to topic name ---
+            raw_title = (llm_title.strip() if llm_title else topic.title())
+            if "#Shorts" not in raw_title:
+                raw_title = f"{raw_title} #Shorts"
+            video_title = raw_title[:97] + "..." if len(raw_title) > 100 else raw_title
 
             # --- Hashtags: from keywords + topic words + fixed viral tags ---
             topic_tags  = [w.strip().lower() for w in topic.replace("-", " ").split() if len(w) > 3]

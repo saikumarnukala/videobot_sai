@@ -84,6 +84,7 @@ Each keyword MUST be:
 
 ## OUTPUT FORMAT (JSON ONLY):
 {{
+    "title": "A punchy YouTube Shorts hook title (max 60 chars, must create curiosity — e.g. 'The Dark Secret Nobody Tells You About {topic}')",
     "script": "The full script text...",
     "keywords": ["scene1 keyword", "scene2 keyword", "scene3 keyword", "scene4 keyword", "scene5 keyword", "scene6 keyword", "scene7 keyword", "scene8 keyword"]
 }}
@@ -117,7 +118,7 @@ Remember: Every viewer who finishes should think "I need to subscribe to see wha
                 data = json.loads(match.group(0))
             else:
                 raise e
-        return data["script"], data["keywords"]
+        return data["script"], data["keywords"], data.get("title", "")
 
     # ------------------------------------------------------------------ #
     #  Backend implementations                                            #
