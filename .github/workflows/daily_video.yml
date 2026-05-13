@@ -2,7 +2,7 @@ name: Daily Faceless Video Bot
 
 on:
   schedule:
-    - cron: '0 18 * * *'   # 2:00 PM EDT / 11:00 AM PDT  → USA afternoon peak
+    - cron: '30 13 * * *'   # 7:00 PM IST (India Standard Time)
 
   workflow_dispatch:
     inputs:
