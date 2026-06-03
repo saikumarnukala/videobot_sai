@@ -10,7 +10,7 @@ text for natural, expressive narration.
 Configuration (via .env):
   DEEPGRAM_API_KEY   = your Deepgram API key (required)
   DEEPGRAM_VOICE     = optional fixed voice (overrides daily rotation)
-  DEEPGRAM_SPEED     = base speaking speed when no emotion is set (default 0.95)
+  DEEPGRAM_SPEED     = base speaking speed for Shorts (default 1.22; 1.0 = normal)
   MAX_RETRIES        = retry count on network failures (default 3)
 
 Daily voice rotation uses expressive Aura-2 English voices only.
@@ -18,6 +18,7 @@ Daily voice rotation uses expressive Aura-2 English voices only.
 
 import os
 import re
+import json
 import time
 import tempfile
 from datetime import date
@@ -42,25 +43,26 @@ AURA2_DAILY_VOICES = [
     "aura-2-draco-en",       # Warm, approachable, storytelling
 ]
 
-# Emotion → speaking speed (Aura-2 range ~0.7–1.5). Slower = weight; faster = urgency.
+# Emotion → speaking speed for YouTube Shorts (Aura-2 range 0.7–1.5; 1.0 = normal).
+# Shorts need snappy delivery — keep all values at or above 1.0.
 EMOTION_SPEED = {
-    "shock": 1.08,
-    "urgency": 1.10,
-    "hook": 1.06,
-    "curiosity": 0.93,
-    "tension": 0.90,
-    "surprise": 1.04,
-    "awe": 0.88,
-    "inspiration": 0.94,
-    "warmth": 0.92,
-    "payoff": 0.93,
-    "belonging": 0.95,
-    "cta": 0.97,
-    "hope": 0.94,
-    "dramatic": 0.89,
+    "shock": 1.30,
+    "urgency": 1.32,
+    "hook": 1.28,
+    "curiosity": 1.24,
+    "tension": 1.22,
+    "surprise": 1.28,
+    "awe": 1.22,
+    "inspiration": 1.24,
+    "warmth": 1.22,
+    "payoff": 1.26,
+    "belonging": 1.23,
+    "cta": 1.26,
+    "hope": 1.24,
+    "dramatic": 1.22,
 }
 
-DEFAULT_SPEED = 0.95
+DEFAULT_SPEED = 1.22
 MAX_RETRIES = 3
 
 
@@ -88,9 +90,8 @@ def _format_for_aura(text: str, emotion: str) -> str:
         else:
             text += "."
 
-    # Dramatic beats: add a trailing pause where the LLM didn't include one.
-    if emotion in ("shock", "awe", "dramatic", "tension") and "..." not in text:
-        text = text.rstrip(".!?") + "..."
+    # Shorts: avoid auto-adding "..." — Aura-2 treats it as a long pause and drags pacing.
+    # Rely on ! and ? for energy; only keep ellipses if the script already includes them.
 
     return text
 
@@ -158,7 +159,9 @@ class AudioGenerator:
     def _speed_for_emotion(self, emotion: str, segment_speed=None) -> float:
         if segment_speed is not None:
             return float(segment_speed)
-        return EMOTION_SPEED.get((emotion or "").lower(), self.base_speed)
+        # Scale emotion preset relative to user's base speed (DEEPGRAM_SPEED).
+        preset = EMOTION_SPEED.get((emotion or "").lower(), self.base_speed)
+        return round(min(1.5, max(0.7, preset)), 2)
 
     def _synthesise_segment(self, text: str, speed: float) -> bytes:
         response = self.client.speak.v1.audio.generate(
@@ -183,38 +186,48 @@ class AudioGenerator:
                 time.sleep(2 * attempt)
         raise RuntimeError("Unreachable")
 
-    def _concat_mp3_segments(self, segment_bytes_list: list[bytes], output_file: str):
+    def _mp3_duration_seconds(self, audio_bytes: bytes) -> float:
+        from pydub import AudioSegment
+
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+            tmp.write(audio_bytes)
+            tmp_path = tmp.name
+        try:
+            return len(AudioSegment.from_mp3(tmp_path)) / 1000.0
+        finally:
+            os.remove(tmp_path)
+
+    def _concat_mp3_segments(self, segment_bytes_list: list[bytes], output_file: str) -> list[float]:
         from pydub import AudioSegment
 
         combined = AudioSegment.empty()
+        durations: list[float] = []
         for chunk in segment_bytes_list:
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
                 tmp.write(chunk)
                 tmp_path = tmp.name
             try:
-                combined += AudioSegment.from_mp3(tmp_path)
+                seg = AudioSegment.from_mp3(tmp_path)
+                durations.append(len(seg) / 1000.0)
+                combined += seg
             finally:
                 os.remove(tmp_path)
 
         os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
         combined.export(output_file, format="mp3", bitrate="128k")
+        return durations
 
     def generate_audio(
         self,
         text: str,
         output_file: str = "temp/temp_audio.mp3",
         tts_segments: list | None = None,
-    ) -> str:
+    ) -> tuple[str, list[dict]]:
         """
         Generate MP3 voiceover with emotion-aware pacing.
 
-        Args:
-            text:          Full script (used for fallback segmentation).
-            output_file:   Destination MP3 path.
-            tts_segments:  Optional list of {"text", "emotion", "speed"?} dicts from ScriptGenerator.
-
         Returns:
-            Path to the generated audio file.
+            Tuple of (audio path, segment timing list with start/end/duration/text/emotion).
         """
         segments = tts_segments or _infer_segments_from_text(text)
         if not segments:
@@ -224,6 +237,7 @@ class AudioGenerator:
         print(f"[Deepgram] Segments : {len(segments)} emotional beats")
 
         segment_audio: list[bytes] = []
+        used_segments: list[dict] = []
         total_chars = 0
 
         for i, seg in enumerate(segments, 1):
@@ -241,7 +255,9 @@ class AudioGenerator:
                 break
 
             print(f"[Deepgram]   [{i}] {emotion} @ {speed:.2f} — {tts_text[:60]}...")
-            segment_audio.append(self._generate_segment_with_retry(tts_text, speed))
+            audio_bytes = self._generate_segment_with_retry(tts_text, speed)
+            segment_audio.append(audio_bytes)
+            used_segments.append({"text": raw, "emotion": emotion})
 
         if not segment_audio:
             raise RuntimeError("No audio segments were generated.")
@@ -250,19 +266,36 @@ class AudioGenerator:
             os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
             with open(output_file, "wb") as f:
                 f.write(segment_audio[0])
+            durations = [self._mp3_duration_seconds(segment_audio[0])]
         else:
-            self._concat_mp3_segments(segment_audio, output_file)
+            durations = self._concat_mp3_segments(segment_audio, output_file)
 
         if not os.path.exists(output_file) or os.path.getsize(output_file) == 0:
             raise FileNotFoundError(
                 f"[Deepgram] Audio generation failed — '{output_file}' is missing or empty."
             )
 
+        cursor = 0.0
+        segment_timings = []
+        for seg, dur in zip(used_segments, durations):
+            segment_timings.append({
+                "text": seg["text"],
+                "emotion": seg["emotion"],
+                "start": round(cursor, 3),
+                "end": round(cursor + dur, 3),
+                "duration": round(dur, 3),
+            })
+            cursor += dur
+
+        timings_path = os.path.join(os.path.dirname(output_file) or ".", "segment_timings.json")
+        with open(timings_path, "w", encoding="utf-8") as f:
+            json.dump(segment_timings, f, indent=2)
+
         print(
             f"[Deepgram] OK Audio saved to '{output_file}' "
-            f"({os.path.getsize(output_file):,} bytes, {len(segment_audio)} segments)"
+            f"({os.path.getsize(output_file):,} bytes, {len(segment_audio)} segments, {cursor:.1f}s)"
         )
-        return output_file
+        return output_file, segment_timings
 
 
 if __name__ == "__main__":
@@ -273,5 +306,5 @@ if __name__ == "__main__":
         {"text": "That's faster than you can blink.", "emotion": "awe"},
         {"text": "Follow for more mind-blowing facts.", "emotion": "cta"},
     ]
-    out = gen.generate_audio("", "test_audio.mp3", tts_segments=test_segments)
-    print(f"[Test] Generated: {out}")
+    out, timings = gen.generate_audio("", "test_audio.mp3", tts_segments=test_segments)
+    print(f"[Test] Generated: {out} ({len(timings)} segments)")

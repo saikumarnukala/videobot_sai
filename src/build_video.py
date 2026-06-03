@@ -250,6 +250,82 @@ def _make_text_image_clip(text, font_size, duration, start, max_width, y_positio
     return clip
 
 
+def _make_subtitle_clips_from_timings(segment_timings):
+    """
+    One subtitle card per TTS segment — synced to actual speech timing.
+    Hook/shock segments use larger yellow text for retention.
+    """
+    if not segment_timings:
+        return []
+
+    clips = []
+    for seg in segment_timings:
+        text = (seg.get("text") or "").strip()
+        if not text:
+            continue
+        start = float(seg.get("start", 0))
+        dur = float(seg.get("duration", 0))
+        if dur <= 0:
+            continue
+
+        emotion = (seg.get("emotion") or "").lower()
+        is_hook = emotion in ("hook", "shock", "urgency")
+        clip = _make_text_image_clip(
+            text.upper(),
+            font_size=62 if is_hook else 50,
+            duration=dur,
+            start=start,
+            max_width=980,
+            y_position=int(TARGET_H * (0.68 if is_hook else 0.74)),
+            text_color=(255, 230, 0, 255) if is_hook else (255, 255, 255, 255),
+            bg_opacity=200 if is_hook else 170,
+            corner_radius=16,
+        )
+        clips.append(clip)
+    return clips
+
+
+def _make_hook_overlay(hook_text, duration):
+    """Large scroll-stopping hook text for the first 0–3 seconds (thumbnail frame)."""
+    hook = (hook_text or "").strip()
+    if not hook or duration <= 0:
+        return None
+    # Keep hook short for on-screen readability
+    words = hook.split()
+    if len(words) > 8:
+        hook = " ".join(words[:8]) + "..."
+    return _make_text_image_clip(
+        hook.upper(),
+        font_size=78,
+        duration=min(duration, 3.5),
+        start=0,
+        max_width=1000,
+        y_position=int(TARGET_H * 0.38),
+        text_color=(255, 255, 255, 255),
+        bg_opacity=210,
+        corner_radius=20,
+    )
+
+
+def _clip_durations_from_segments(segment_timings, n_clips):
+    """Map TTS segment durations onto background clip slots."""
+    if not segment_timings or n_clips <= 0:
+        return None
+
+    clip_durations = [0.0] * n_clips
+    n_seg = len(segment_timings)
+    for i, seg in enumerate(segment_timings):
+        clip_idx = min(int(i * n_clips / n_seg), n_clips - 1)
+        clip_durations[clip_idx] += float(seg.get("duration", 0))
+
+    # Ensure every clip gets minimum time if segments exist
+    min_dur = max(0.5, sum(clip_durations) / n_clips * 0.25)
+    for i in range(n_clips):
+        if clip_durations[i] < min_dur:
+            clip_durations[i] = min_dur
+    return clip_durations
+
+
 def _make_subtitle_clips(script_text, audio_duration):
     """
     Generate word-group subtitle overlays synced across the audio duration.
@@ -293,7 +369,9 @@ class VideoBuilder:
         pass
 
     def build_final_video(self, video_paths: list, audio_path: str,
-                          output_path="final_short.mp4", script_text: str = ""):
+                          output_path="final_short.mp4", script_text: str = "",
+                          segment_timings: list | None = None,
+                          hook_title: str = ""):
         print(f"Loading {len(video_paths)} background clips...")
         print(f"Loading main audio: {audio_path}")
 
@@ -316,7 +394,12 @@ class VideoBuilder:
             raise RuntimeError("No valid background clips could be loaded. Cannot build video.")
 
         n_clips = len(loaded_clips)
-        time_per_clip = audio_duration / n_clips + CROSSFADE
+        clip_durations = _clip_durations_from_segments(segment_timings, n_clips)
+        if clip_durations:
+            print(f"  Scene timing synced to {len(segment_timings)} TTS segments")
+            time_per_clip_list = [d + CROSSFADE for d in clip_durations]
+        else:
+            time_per_clip_list = [audio_duration / n_clips + CROSSFADE] * n_clips
 
         # Shuffle Ken Burns presets so consecutive clips get different effects
         kb_presets = _KB_PRESETS.copy()
@@ -324,12 +407,13 @@ class VideoBuilder:
 
         processed_video_clips = []
         for i, clip in enumerate(loaded_clips):
+            time_per_clip = time_per_clip_list[i]
             clip = _resize_to_portrait(clip)
             clip = _loop_to_duration(clip, time_per_clip)
             # Apply cinematic Ken Burns zoom/pan
             preset = kb_presets[i % len(kb_presets)]
             clip = _apply_ken_burns(clip, preset)
-            print(f"  Scene {i+1}: Ken Burns '{preset['name']}' applied")
+            print(f"  Scene {i+1}: {time_per_clip:.1f}s, Ken Burns '{preset['name']}'")
             processed_video_clips.append(clip)
 
         # Concatenate with crossfade transitions
@@ -366,17 +450,38 @@ class VideoBuilder:
         # ── 3. Overlay layers ───────────────────────────────────────────
         final_clips = [background_clip]
 
-        # 3a. Subtitle overlays (word-groups synced to audio)
-        if script_text:
-            print("Generating subtitle overlays...")
+        # 3a. Hook overlay (first segment — also serves as Shorts thumbnail frame)
+        hook_dur = segment_timings[0]["duration"] if segment_timings else min(3.0, audio_duration)
+        hook_text = hook_title or (segment_timings[0]["text"] if segment_timings else "")
+        hook_clip = _make_hook_overlay(hook_text, hook_dur)
+        if hook_clip:
+            final_clips.append(hook_clip)
+            print(f"  Hook overlay: '{hook_text[:50]}{'...' if len(hook_text) > 50 else ''}' ({hook_dur:.1f}s)")
+
+        # 3b. Subtitle overlays synced to TTS segments
+        if segment_timings:
+            print("Generating segment-synced subtitle overlays...")
+            sub_clips = _make_subtitle_clips_from_timings(segment_timings)
+        elif script_text:
+            print("Generating subtitle overlays (fallback equal timing)...")
             sub_clips = _make_subtitle_clips(script_text, audio_duration)
-            final_clips.extend(sub_clips)
+        else:
+            sub_clips = []
+        final_clips.extend(sub_clips)
+        if sub_clips:
             print(f"  {len(sub_clips)} subtitle cards generated")
 
-        # 3b. Subscribe CTA overlay (last 3 seconds)
+        # 3c. Topic-specific CTA overlay (last 3 seconds)
         cta_start = max(0, audio_duration - 3.0)
+        cta_text = "FOLLOW FOR PART 2"
+        if segment_timings:
+            last = segment_timings[-1]
+            if last.get("emotion") in ("cta", "hope", "belonging"):
+                cta_words = last.get("text", "").split()
+                if len(cta_words) <= 6:
+                    cta_text = last["text"].upper()
         cta_clip = _make_text_image_clip(
-            "SUBSCRIBE FOR MORE",
+            cta_text,
             font_size=52,
             duration=3.0,
             start=cta_start,

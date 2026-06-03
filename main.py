@@ -51,9 +51,6 @@ def run_pipeline():
     target_length = int(os.getenv("VIDEO_LENGTH_SECONDS", "45"))
     upload_enabled = os.getenv("UPLOAD_TO_YOUTUBE", "False").lower() in ("true", "1", "yes")
 
-    # Mark this topic as used so it never repeats
-    _mark_topic_used(topic)
-
     # Ensure working directories exist (required on fresh CI runners)
     os.makedirs("temp", exist_ok=True)
     os.makedirs("output", exist_ok=True)
@@ -74,7 +71,9 @@ def run_pipeline():
     print(f"\n[2/7] Generating Voiceover...")
     audio_gen = AudioGenerator()
     audio_file = "temp/temp_audio.mp3"
-    audio_gen.generate_audio(script_text, output_file=audio_file, tts_segments=tts_segments)
+    audio_file, segment_timings = audio_gen.generate_audio(
+        script_text, output_file=audio_file, tts_segments=tts_segments
+    )
 
     # 3. Download Background Media (8 unique clips)
     print(f"\n[3/7] Fetching {len(keywords)} Background Videos (full-HD, deduplicated)...")
@@ -105,6 +104,8 @@ def run_pipeline():
         audio_path=audio_file,
         output_path=final_output,
         script_text=script_text,
+        segment_timings=segment_timings,
+        hook_title=llm_title,
     )
 
     # 6. Upload to YouTube
@@ -114,28 +115,27 @@ def run_pipeline():
             print("Upload is ENABLED! Connecting to YouTube...")
             uploader = YouTubeUploader()
 
-            # --- Title: use LLM-generated hook title, fall back to topic name ---
+            # --- Title: LLM hook title optimized for clicks ---
             raw_title = (llm_title.strip() if llm_title else topic.title())
             if "#Shorts" not in raw_title:
                 raw_title = f"{raw_title} #Shorts"
             video_title = raw_title[:97] + "..." if len(raw_title) > 100 else raw_title
 
-            # --- Hashtags: from keywords + topic words + fixed viral tags ---
-            topic_tags  = [w.strip().lower() for w in topic.replace("-", " ").split() if len(w) > 3]
-            scene_tags  = ["".join(k.split()).lower() for k in keywords[:5]]
-            fixed_tags  = ["shorts", "shortsvideo", "viral", "trending", "facts",
-                           "youtubeshorts", "reels", "shortsfeed"]
+            # --- Tags: topic-specific only (avoid generic spam) ---
+            topic_tags  = [w.strip().lower() for w in topic.replace("-", " ").split() if len(w) > 3][:4]
+            scene_tags  = ["".join(k.split()).lower() for k in keywords[:3]]
+            niche_tags  = ["shorts", "youtubeshorts", "facts"]
             all_hashtags = list(dict.fromkeys(
-                ["#" + t for t in (scene_tags + topic_tags + fixed_tags)]
-            ))[:15]
+                ["#" + t for t in (scene_tags + topic_tags + niche_tags)]
+            ))[:8]
 
-            # --- Description: hook + hashtags + music credit ---
-            hook       = script_text[:150].rsplit(" ", 1)[0] + "..."
+            # --- Description: title-led, clean CTA ---
+            payoff = script_text[-120:].strip() if len(script_text) > 120 else script_text
             hashtag_str = " ".join(all_hashtags)
             description = (
-                f"{hook}\n\n"
-                f"Watch till the end! 🔥\n\n"
-                f"───────────────────\n"
+                f"{llm_title or topic}\n\n"
+                f"{payoff}\n\n"
+                f"Follow for daily Shorts like this.\n\n"
                 f"{hashtag_str}"
             )
             if selected_music:
@@ -148,23 +148,30 @@ def run_pipeline():
                 description += music_credit
 
             # --- Tags array for YouTube API (plain words, no #) ---
-            api_tags = [t.lstrip("#") for t in all_hashtags] + ["shortsvideo", "viralvideo"]
+            api_tags = [t.lstrip("#") for t in all_hashtags]
+            category_id = os.getenv("YOUTUBE_CATEGORY_ID", "27")
 
             print(f"  Title      : {video_title}")
+            print(f"  Category   : {category_id}")
             print(f"  Hashtags   : {hashtag_str}")
 
-            uploader.upload_short(
+            video_id = uploader.upload_short(
                 file_path=final_output,
                 title=video_title,
                 description=description,
-                tags=api_tags
+                tags=api_tags,
+                category_id=category_id,
             )
+            print(f"  Video ID   : {video_id}")
         except Exception as e:
             print(f"YouTube Upload Failed! Check your quota or client_secrets.json/token.json: {e}")
     else:
         print("Upload is DISABLED via .env file. Skipping upload so you can preview it locally!")
 
     print(f"\n=== PIPELINE SUCCESS v{VERSION}: '{final_output}' ===")
+
+    # Mark topic used only after successful video render
+    _mark_topic_used(topic)
 
     # 7. Cleanup temp folder
     print("\n[7/7] Cleaning up temporary processing files...")

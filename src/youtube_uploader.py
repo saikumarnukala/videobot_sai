@@ -101,7 +101,9 @@ class YouTubeUploader:
                 "title": title,
                 "description": description,
                 "tags": tags,
-                "categoryId": category_id
+                "categoryId": category_id,
+                "defaultLanguage": "en",
+                "defaultAudioLanguage": "en",
             },
             "status": {
                 "privacyStatus": privacy_status,

@@ -114,14 +114,15 @@ jobs:
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
           UPLOAD_TO_YOUTUBE: "true"
           VIDEO_LENGTH_SECONDS: "55"
-          RENDER_PRESET: "ultrafast"
+          RENDER_PRESET: "fast"
           YOUTUBE_PRIVACY: ${{ secrets.YOUTUBE_PRIVACY || 'public' }}
+          YOUTUBE_CATEGORY_ID: ${{ secrets.YOUTUBE_CATEGORY_ID || '27' }}
           GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'llama-3.3-70b-versatile' }}
           DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
           DEEPGRAM_VOICE: ${{ secrets.DEEPGRAM_VOICE || '' }}
-          DEEPGRAM_SPEED: "0.95"
+          DEEPGRAM_SPEED: "1.22"
           MAX_RETRIES: "3"
-          ENABLE_KEN_BURNS: "false"
+          ENABLE_KEN_BURNS: "true"
         run: |
           if [ "${{ steps.topic_select.outputs.use_news }}" = "true" ]; then
             python main.py --news --news-index ${{ steps.topic_select.outputs.news_index }}
