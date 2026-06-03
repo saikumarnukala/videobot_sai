@@ -66,8 +66,23 @@ VIDEO LENGTH: {length_seconds} seconds ({word_count} words)
 - Use vivid, sensory language: "The air crackles with energy as..."
 - Vary sentence length for musical rhythm
 - NO filler phrases ("in this video", "today we'll talk about")
-- NO stage directions, timestamps, or emojis
+- NO stage directions, timestamps, or emojis in the main script
 - ONLY spoken words - every word must earn its place
+
+## TTS EMOTIONAL DELIVERY (CRITICAL — for Deepgram Aura-2 voiceover):
+The voice engine reads emotion from punctuation, pacing, and context. You MUST also output
+`tts_segments`: short spoken beats, each tagged with an emotion so the narrator shifts tone.
+
+Emotion tags (use exactly these): shock, urgency, hook, curiosity, tension, surprise, awe,
+inspiration, warmth, payoff, belonging, cta, hope, dramatic
+
+TTS segment text rules:
+- Short punchy sentences — one beat per segment (5–20 words)
+- Use commas for natural pauses, ellipses (...) for dramatic suspense
+- Use ! for shock/urgency, ? for curiosity — never ALL CAPS or multiple !!!
+- Match emotion to script section: hook=shock/hook, middle=curiosity/tension/payoff, end=hope/cta
+- Segment texts must cover the FULL script (concatenated = same story as `script`)
+- Do NOT include emotion words in spoken text (no "said excitedly")
 
 ## BACKGROUND VIDEO KEYWORDS:
 Generate exactly 8 cinematic background video search terms for Pexels stock footage:
@@ -85,7 +100,14 @@ Each keyword MUST be:
 ## OUTPUT FORMAT (JSON ONLY):
 {{
     "title": "A punchy YouTube Shorts hook title (max 60 chars, must create curiosity — e.g. 'The Dark Secret Nobody Tells You About {topic}')",
-    "script": "The full script text...",
+    "script": "The full clean script text for subtitles (no ellipses overload, natural spoken words)...",
+    "tts_segments": [
+        {{"text": "Stop everything.", "emotion": "shock"}},
+        {{"text": "What if I told you, 97% of people get this wrong?", "emotion": "curiosity"}},
+        {{"text": "But here's what nobody tells you...", "emotion": "tension"}},
+        {{"text": "The answer will change how you see everything.", "emotion": "awe"}},
+        {{"text": "Follow for more, we're just getting started.", "emotion": "cta"}}
+    ],
     "keywords": ["scene1 keyword", "scene2 keyword", "scene3 keyword", "scene4 keyword", "scene5 keyword", "scene6 keyword", "scene7 keyword", "scene8 keyword"]
 }}
 
@@ -118,7 +140,10 @@ Remember: Every viewer who finishes should think "I need to subscribe to see wha
                 data = json.loads(match.group(0))
             else:
                 raise e
-        return data["script"], data["keywords"], data.get("title", "")
+        tts_segments = data.get("tts_segments") or []
+        if tts_segments and not isinstance(tts_segments, list):
+            tts_segments = []
+        return data["script"], data["keywords"], data.get("title", ""), tts_segments
 
     # ------------------------------------------------------------------ #
     #  Backend implementations                                            #
@@ -153,7 +178,7 @@ if __name__ == "__main__":
     try:
         generator = ScriptGenerator()
         topic = os.getenv("VIDEO_TOPIC", "creepiest ocean facts")
-        script, keywords = generator.generate_script(topic)
+        script, keywords, title, tts_segments = generator.generate_script(topic)
         print("\n--- GENERATED SCRIPT ---")
         print(script)
         print("\n--- SCENES/KEYWORDS ---")

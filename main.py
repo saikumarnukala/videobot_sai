@@ -60,7 +60,9 @@ def run_pipeline():
 
     print(f"\n[1/7] Generating Script & 8 Cinematic Scenes for topic: '{topic}'...")
     script_gen = ScriptGenerator()
-    script_text, keywords, llm_title = script_gen.generate_script(topic, length_seconds=target_length)
+    script_text, keywords, llm_title, tts_segments = script_gen.generate_script(
+        topic, length_seconds=target_length
+    )
 
     print("\n--- SCRIPT ---")
     print(script_text)
@@ -72,7 +74,7 @@ def run_pipeline():
     print(f"\n[2/7] Generating Voiceover...")
     audio_gen = AudioGenerator()
     audio_file = "temp/temp_audio.mp3"
-    audio_gen.generate_audio(script_text, output_file=audio_file)
+    audio_gen.generate_audio(script_text, output_file=audio_file, tts_segments=tts_segments)
 
     # 3. Download Background Media (8 unique clips)
     print(f"\n[3/7] Fetching {len(keywords)} Background Videos (full-HD, deduplicated)...")

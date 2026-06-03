@@ -117,9 +117,10 @@ jobs:
           RENDER_PRESET: "ultrafast"
           YOUTUBE_PRIVACY: ${{ secrets.YOUTUBE_PRIVACY || 'public' }}
           GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'llama-3.3-70b-versatile' }}
-          EDGE_VOICE: ${{ secrets.EDGE_VOICE || 'ko-KR-HyunsuMultilingualNeural' }}
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+          DEEPGRAM_VOICE: ${{ secrets.DEEPGRAM_VOICE || '' }}
+          DEEPGRAM_SPEED: "0.95"
           MAX_RETRIES: "3"
-          VOLUME_BOOST: "+50%"
           ENABLE_KEN_BURNS: "false"
         run: |
           if [ "${{ steps.topic_select.outputs.use_news }}" = "true" ]; then

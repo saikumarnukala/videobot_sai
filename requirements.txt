@@ -1,5 +1,5 @@
 openai
-edge-tts
+deepgram-sdk
 moviepy
 requests
 google-api-python-client
@@ -9,3 +9,4 @@ python-dotenv
 feedparser
 Pillow
 numpy
+pydub
