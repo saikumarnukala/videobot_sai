@@ -75,6 +75,17 @@ def run_pipeline():
         script_text, output_file=audio_file, tts_segments=tts_segments
     )
 
+    from moviepy import AudioFileClip
+    audio_probe = AudioFileClip(audio_file)
+    audio_duration = audio_probe.duration
+    audio_probe.close()
+    print(f"[Audio] Duration: {audio_duration:.1f}s (target: {target_length}s)")
+    if audio_duration < target_length * 0.65:
+        print(
+            f"[!] Warning: voiceover is much shorter than target ({audio_duration:.0f}s vs {target_length}s). "
+            "Script may need more segments."
+        )
+
     # 3. Download Background Media (8 unique clips)
     print(f"\n[3/7] Fetching {len(keywords)} Background Videos (full-HD, deduplicated)...")
     media_fetcher = MediaFetcher()

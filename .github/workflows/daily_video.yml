@@ -113,7 +113,7 @@ jobs:
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
           UPLOAD_TO_YOUTUBE: "true"
-          VIDEO_LENGTH_SECONDS: "55"
+          VIDEO_LENGTH_SECONDS: "85"
           RENDER_PRESET: "fast"
           YOUTUBE_PRIVACY: ${{ secrets.YOUTUBE_PRIVACY || 'public' }}
           YOUTUBE_CATEGORY_ID: ${{ secrets.YOUTUBE_CATEGORY_ID || '27' }}

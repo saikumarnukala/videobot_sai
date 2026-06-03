@@ -16,8 +16,18 @@ BANNED_PHRASES = [
 ]
 
 MAX_HOOK_WORDS = 12
-MIN_SEGMENTS = 4
 REQUIRED_KEYWORDS = 8
+AURA2_MAX_SEGMENT_CHARS = 2000  # per API call, not total audio
+
+
+def _target_words(length_seconds: int) -> int:
+    """~3 words/sec at 1.22x TTS pace fills the target duration."""
+    return int(int(length_seconds) * 3.0)
+
+
+def _min_segments(length_seconds: int) -> int:
+    """One segment roughly every 4 seconds of video."""
+    return max(6, int(int(length_seconds) // 4))
 
 
 class ScriptGenerator:
@@ -30,8 +40,8 @@ class ScriptGenerator:
             raise ValueError("GROQ_API_KEY is missing in .env")
 
     def _build_prompt(self, topic, length_seconds, strict=False):
-        # Fast TTS (~1.22x) needs slightly more words to fill the target duration
-        word_count = int(int(length_seconds) * 3.8)
+        word_count = _target_words(length_seconds)
+        min_segments = _min_segments(length_seconds)
         integrity = """
 ## FACTUAL INTEGRITY (NON-NEGOTIABLE):
 - Only use plausible, general-knowledge claims — NO fake studies, universities, or "leaked documents"
@@ -45,54 +55,54 @@ class ScriptGenerator:
 - First tts_segment MUST be 12 words or fewer
 """
 
-        return f"""You are an elite YouTube Shorts scriptwriter focused on RETENTION and SHAREABILITY.
-Your videos hook in under 2 seconds, deliver one clear "wow" insight, and end with a reason to follow.
+        return f"""You are an elite YouTube scriptwriter focused on RETENTION for {length_seconds}-second videos.
+Your scripts hook instantly, stack curiosity for over a minute, and end with a follow-worthy payoff.
 
 TOPIC: {topic}
-VIDEO LENGTH: {length_seconds} seconds (~{word_count} spoken words at fast narration pace)
+VIDEO LENGTH: {length_seconds} seconds — MUST fill the full duration (~{word_count} spoken words at 1.22x fast narration)
+MINIMUM tts_segments: {min_segments} (required to reach target length)
 {integrity}
 
-## RETENTION STRUCTURE:
+## RETENTION STRUCTURE (scale to {length_seconds}s):
 
-### 1. SCROLL-STOP HOOK (0–2s)
-- Open with a bold question, counterintuitive fact, or "Stop —" pattern interrupt
+### 1. SCROLL-STOP HOOK (first 3–5s)
+- Bold question, counterintuitive fact, or "Stop —" pattern interrupt
 - First tts_segment: MAX 12 words, emotion=shock or hook
-- Create an information gap the viewer MUST resolve
 
-### 2. CURIOSITY STACK (3–18s)
-- 2–3 rapid beats: setup → twist → "but here's the part nobody talks about"
-- Each beat = one tts_segment with matching emotion (curiosity, tension, surprise)
-- Short sentences. Punchy rhythm. No filler.
+### 2. CURIOSITY STACK (5–35s)
+- 4–6 rapid beats: setup → twist → "but here's what nobody talks about"
+- Each beat = one tts_segment (curiosity, tension, surprise)
+- Keep stacking open loops — do NOT resolve too early
 
-### 3. PAYOFF (18–35s)
-- Deliver ONE memorable insight the viewer can repeat to a friend
-- Make it specific, visual, and shareable
-- emotion=awe or payoff
+### 3. DEEP DIVE (35–70s) — CRITICAL for long videos
+- 3–4 distinct insights, each with its own mini-story or example
+- Use "Here's where it gets weird", "And it gets better", "But wait" transitions
+- emotion=payoff, awe, inspiration between beats
+- This section MUST be the longest part of the script
 
-### 4. FOLLOW CTA (last 5s)
-- Natural follow prompt tied to the topic ("Follow for more [specific niche] facts")
-- emotion=cta or hope — NOT generic "subscribe to my channel"
+### 4. FOLLOW CTA (last 5–8s)
+- Natural follow prompt tied to the topic
+- emotion=cta or hope
 
 ## WRITING RULES:
 - Documentary narrator tone: confident, vivid, conversational
 - NO "in this video", NO timestamps, NO emojis in script
 - NO stage directions — spoken words only
-- Every sentence must advance the story or raise stakes
+- Script MUST be ~{word_count} words — short scripts are rejected
 
 ## TTS SEGMENTS (Deepgram Aura-2):
 Output `tts_segments`: one spoken beat per line, each with emotion tag.
 Emotions: shock, urgency, hook, curiosity, tension, surprise, awe, inspiration, warmth, payoff, belonging, cta, hope, dramatic
 
 Rules:
-- 6–12 segments total covering the FULL script
-- 5–18 words per segment
+- {min_segments}–{min_segments + 8} segments total — REQUIRED for {length_seconds}s video
+- 8–20 words per segment
 - Use commas for pauses; avoid ellipses (...)
-- Use ! for energy, ? for curiosity
 - Concatenated segment text ≈ same story as `script`
 
 ## BACKGROUND KEYWORDS (exactly 8):
 1. Hook scene — dramatic, high-motion visual
-2–7. Story beats — concrete visual metaphors matching each segment
+2–7. Story beats spread across the full {length_seconds}s runtime
 8. CTA scene — inspiring forward-looking visual
 Each: 3–5 words, filmable stock footage, no brands/celebrities
 
@@ -125,8 +135,10 @@ The title must work as a standalone hook — viewers should click even without c
             errors.append("empty title")
         if len(keywords) != REQUIRED_KEYWORDS:
             errors.append(f"need {REQUIRED_KEYWORDS} keywords, got {len(keywords)}")
-        if len(segments) < MIN_SEGMENTS:
-            errors.append(f"need at least {MIN_SEGMENTS} tts_segments, got {len(segments)}")
+        if len(segments) < _min_segments(length_seconds):
+            errors.append(
+                f"need at least {_min_segments(length_seconds)} tts_segments, got {len(segments)}"
+            )
 
         if segments:
             hook_words = len(segments[0].get("text", "").split())
@@ -139,11 +151,11 @@ The title must work as a standalone hook — viewers should click even without c
                 errors.append(f"banned phrase: '{phrase}'")
 
         word_count = len(script.split())
-        target = int(length_seconds) * 3.8
-        if word_count < target * 0.5:
-            errors.append(f"script too short ({word_count} words, target ~{int(target)})")
-        if word_count > target * 1.6:
-            errors.append(f"script too long ({word_count} words)")
+        target = _target_words(length_seconds)
+        if word_count < target * 0.75:
+            errors.append(f"script too short ({word_count} words, target ~{target})")
+        if word_count > target * 1.5:
+            errors.append(f"script too long ({word_count} words, target ~{target})")
 
         return errors
 

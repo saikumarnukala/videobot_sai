@@ -64,6 +64,7 @@ EMOTION_SPEED = {
 
 DEFAULT_SPEED = 1.22
 MAX_RETRIES = 3
+AURA2_MAX_SEGMENT_CHARS = 2000  # Deepgram limit per request, not total audio length
 
 
 def get_daily_voice(voices=None) -> str:
@@ -238,7 +239,6 @@ class AudioGenerator:
 
         segment_audio: list[bytes] = []
         used_segments: list[dict] = []
-        total_chars = 0
 
         for i, seg in enumerate(segments, 1):
             raw = (seg.get("text") or "").strip()
@@ -248,11 +248,10 @@ class AudioGenerator:
             emotion = (seg.get("emotion") or "hook").lower()
             speed = self._speed_for_emotion(emotion, seg.get("speed"))
             tts_text = _format_for_aura(raw, emotion)
-            total_chars += len(tts_text)
 
-            if total_chars > 2000:
-                print("[Deepgram] Warning: approaching Aura-2 2000-char limit; skipping remaining segments.")
-                break
+            if len(tts_text) > AURA2_MAX_SEGMENT_CHARS:
+                print(f"[Deepgram] Warning: segment {i} truncated to {AURA2_MAX_SEGMENT_CHARS} chars.")
+                tts_text = tts_text[:AURA2_MAX_SEGMENT_CHARS]
 
             print(f"[Deepgram]   [{i}] {emotion} @ {speed:.2f} — {tts_text[:60]}...")
             audio_bytes = self._generate_segment_with_retry(tts_text, speed)
