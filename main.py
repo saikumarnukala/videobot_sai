@@ -48,7 +48,7 @@ def run_pipeline():
         topic = NewsFetcher().get_breaking_topic(index=args.news_index)
     else:
         topic = os.getenv("VIDEO_TOPIC", "interesting facts about space")
-    target_length = int(os.getenv("VIDEO_LENGTH_SECONDS", "45"))
+    target_length = int(os.getenv("VIDEO_LENGTH_SECONDS", "85"))
     upload_enabled = os.getenv("UPLOAD_TO_YOUTUBE", "False").lower() in ("true", "1", "yes")
 
     # Ensure working directories exist (required on fresh CI runners)
@@ -80,10 +80,15 @@ def run_pipeline():
     audio_duration = audio_probe.duration
     audio_probe.close()
     print(f"[Audio] Duration: {audio_duration:.1f}s (target: {target_length}s)")
-    if audio_duration < target_length * 0.65:
-        print(
-            f"[!] Warning: voiceover is much shorter than target ({audio_duration:.0f}s vs {target_length}s). "
-            "Script may need more segments."
+    if audio_duration < target_length * 0.75:
+        raise RuntimeError(
+            f"Voiceover too short ({audio_duration:.1f}s vs {target_length}s target). "
+            "Pipeline aborted to avoid uploading a short video."
+        )
+    if audio_duration > target_length * 1.15:
+        raise RuntimeError(
+            f"Voiceover too long ({audio_duration:.1f}s vs {target_length}s target). "
+            "Script word count exceeded limit — regenerate with tighter prompt."
         )
 
     # 3. Download Background Media (8 unique clips)
