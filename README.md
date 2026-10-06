@@ -8,7 +8,7 @@ Fully automated Python pipeline that generates and publishes **faceless YouTube 
 - **Text-to-Speech Voiceover** — Microsoft Edge TTS with word-level subtitle timestamps
 - **Stock Background Videos** — Pexels API downloads scene-matched clips per script keyword
 - **Dynamic Subtitles** — Bold captions synced to audio with system font fallbacks for CI
-- **Background Music** — Jamendo API auto-downloads royalty-free CC-licensed music matched to topic mood
+- **Background Music** — YouTube Audio Library (calm instrumental tracks from studio.youtube.com)
 - **Ken Burns Effect** — Optional cinematic zoom/pan on clips (disable in CI for speed)
 - **Auto YouTube Upload** — YouTube Data API v3 publishes directly to your channel
 - **Topic Rotation** — Never-repeat system tracks used topics in `used_topics.json`
@@ -38,7 +38,6 @@ cp .env.example .env         # then edit .env with your keys
 |-----|-------------|----------|
 | `GROQ_API_KEY` | [Groq Console](https://console.groq.com/) — Free | Yes |
 | `PEXELS_API_KEY` | [Pexels API](https://www.pexels.com/api/) — Free | Yes |
-| `JAMENDO_CLIENT_ID` | [Jamendo Developer](https://developer.jamendo.com/) — Free | Yes |
 | `client_secrets.json` | [Google Cloud Console](https://console.cloud.google.com/) — YouTube Data API v3 | For upload |
 
 ### 3. YouTube authentication (first time only)
@@ -79,7 +78,6 @@ Go to **Settings > Secrets and variables > Actions** and add:
 |--------|-------------|
 | `GROQ_API_KEY` | Groq API key |
 | `PEXELS_API_KEY` | Pexels API key |
-| `JAMENDO_CLIENT_ID` | Jamendo client ID |
 | `YOUTUBE_CLIENT_SECRETS_JSON` | Full contents of `client_secrets.json` |
 | `YOUTUBE_TOKEN_JSON` | Full contents of `token.json` |
 
@@ -106,7 +104,7 @@ videobot_sai/
     ├── script_generator.py  # Groq AI script generation
     ├── create_audio.py      # Edge TTS voiceover + subtitle timestamps
     ├── media_fetcher.py     # Pexels stock video downloader
-    ├── music_fetcher.py     # Jamendo background music (with fallback search)
+    ├── music_fetcher.py     # YouTube Audio Library background music
     ├── news_fetcher.py      # RSS news headline fetcher
     ├── build_video.py       # MoviePy video assembly + Ken Burns effect
     └── youtube_uploader.py  # YouTube Data API v3 uploader

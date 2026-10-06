@@ -360,6 +360,58 @@ def _make_subtitle_clips(script_text, audio_duration):
     return clips
 
 
+def _mix_background_music(audio_clip, bgm_path: str, segment_timings: list | None = None):
+    """
+    Blend calm BGM under voiceover — low volume, ducked while narration plays.
+    """
+    audio_duration = audio_clip.duration
+    bgm_volume = float(os.getenv("BGM_VOLUME", "0.05"))
+    duck_ratio = float(os.getenv("BGM_DUCK_RATIO", "0.55"))
+    duck_ratio = min(1.0, max(0.1, duck_ratio))
+
+    music_base = AudioFileClip(bgm_path).with_effects([
+        afx.AudioLoop(duration=audio_duration),
+    ])
+
+    if segment_timings and duck_ratio < 1.0:
+        duck_vol = bgm_volume * duck_ratio
+        parts = []
+        cursor = 0.0
+        for seg in segment_timings:
+            start = float(seg.get("start", cursor))
+            end = float(seg.get("end", start + seg.get("duration", 0)))
+            start = max(0.0, min(start, audio_duration))
+            end = max(start, min(end, audio_duration))
+            if start > cursor + 0.05:
+                gap = music_base.subclipped(cursor, start).with_effects([
+                    afx.MultiplyVolume(bgm_volume),
+                ])
+                parts.append(gap.with_start(cursor))
+            if end > start:
+                speech = music_base.subclipped(start, end).with_effects([
+                    afx.MultiplyVolume(duck_vol),
+                ])
+                parts.append(speech.with_start(start))
+            cursor = end
+        if cursor < audio_duration - 0.05:
+            tail = music_base.subclipped(cursor, audio_duration).with_effects([
+                afx.MultiplyVolume(bgm_volume),
+            ])
+            parts.append(tail.with_start(cursor))
+        music_clip = CompositeAudioClip(parts) if parts else music_base.with_effects([
+            afx.MultiplyVolume(bgm_volume),
+        ])
+        print(f"  BGM ducking: {bgm_volume:.0%} base, {duck_vol:.0%} under voice")
+    else:
+        music_clip = music_base.with_effects([afx.MultiplyVolume(bgm_volume)])
+
+    music_clip = music_clip.with_effects([
+        afx.AudioFadeIn(2.0),
+        afx.AudioFadeOut(3.0),
+    ])
+    return CompositeAudioClip([audio_clip, music_clip]), music_clip
+
+
 # ──────────────────────────────────────────────────────────────────────────
 #  Main video builder
 # ──────────────────────────────────────────────────────────────────────────
@@ -385,8 +437,13 @@ class VideoBuilder:
         loaded_clips = []
         for path in video_paths:
             try:
-                clip = VideoFileClip(path)
-                loaded_clips.append(clip)
+                is_image = False
+                if path.lower().endswith(('.jpg', '.jpeg', '.png')):
+                    clip = ImageClip(path)
+                    is_image = True
+                else:
+                    clip = VideoFileClip(path)
+                loaded_clips.append((clip, is_image))
             except Exception as e:
                 print(f"[!] Skipping corrupt/unreadable clip: {path} ({e})")
 
@@ -406,10 +463,16 @@ class VideoBuilder:
         random.shuffle(kb_presets)
 
         processed_video_clips = []
-        for i, clip in enumerate(loaded_clips):
+        for i, (clip, is_image) in enumerate(loaded_clips):
             time_per_clip = time_per_clip_list[i]
             clip = _resize_to_portrait(clip)
-            clip = _loop_to_duration(clip, time_per_clip)
+            if is_image:
+                if hasattr(clip, "with_duration"):
+                    clip = clip.with_duration(time_per_clip)
+                else:
+                    clip = clip.set_duration(time_per_clip)
+            else:
+                clip = _loop_to_duration(clip, time_per_clip)
             # Apply cinematic Ken Burns zoom/pan
             preset = kb_presets[i % len(kb_presets)]
             clip = _apply_ken_burns(clip, preset)
@@ -434,18 +497,9 @@ class VideoBuilder:
         final_audio = audio_clip
         if os.path.exists(bgm_path):
             print(f"Mixing background music with voiceover...")
-            bgm_volume = float(os.getenv("BGM_VOLUME", "0.10"))
-
-            music_clip = AudioFileClip(bgm_path).with_effects([
-                afx.AudioLoop(duration=audio_duration),
-                afx.MultiplyVolume(bgm_volume)
-            ])
-            # Fade music in first 2s and out last 3s for a polished feel
-            music_clip = music_clip.with_effects([
-                afx.AudioFadeIn(2.0),
-                afx.AudioFadeOut(3.0),
-            ])
-            final_audio = CompositeAudioClip([audio_clip, music_clip])
+            final_audio, music_clip = _mix_background_music(
+                audio_clip, bgm_path, segment_timings
+            )
 
         # ── 3. Overlay layers ───────────────────────────────────────────
         final_clips = [background_clip]
@@ -471,26 +525,7 @@ class VideoBuilder:
         if sub_clips:
             print(f"  {len(sub_clips)} subtitle cards generated")
 
-        # 3c. Topic-specific CTA overlay (last 3 seconds)
-        cta_start = max(0, audio_duration - 3.0)
-        cta_text = "FOLLOW FOR PART 2"
-        if segment_timings:
-            last = segment_timings[-1]
-            if last.get("emotion") in ("cta", "hope", "belonging"):
-                cta_words = last.get("text", "").split()
-                if len(cta_words) <= 6:
-                    cta_text = last["text"].upper()
-        cta_clip = _make_text_image_clip(
-            cta_text,
-            font_size=52,
-            duration=3.0,
-            start=cta_start,
-            max_width=900,
-            y_position=int(TARGET_H * 0.88),
-            text_color=(255, 220, 0, 255),
-            bg_opacity=200,
-        )
-        final_clips.append(cta_clip)
+        # The CTA overlay block has been removed as per user request.
 
         # ── 4. Composite & Render ───────────────────────────────────────
         composite_video = CompositeVideoClip(
@@ -572,7 +607,7 @@ class VideoBuilder:
                 pass
         for c in loaded_clips:
             try:
-                c.close()
+                c[0].close()
             except Exception:
                 pass
 

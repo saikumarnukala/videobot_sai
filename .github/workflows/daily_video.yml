@@ -107,7 +107,6 @@ jobs:
       - name: Generate video and upload to YouTube
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          JAMENDO_CLIENT_ID: ${{ secrets.JAMENDO_CLIENT_ID }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
@@ -123,6 +122,8 @@ jobs:
           DEEPGRAM_SPEED: "1.22"
           MAX_RETRIES: "3"
           ENABLE_KEN_BURNS: "true"
+          BGM_VOLUME: "0.05"
+          BGM_DUCK_RATIO: "0.55"
         run: |
           if [ "${{ steps.topic_select.outputs.use_news }}" = "true" ]; then
             python main.py --news --news-index ${{ steps.topic_select.outputs.news_index }}

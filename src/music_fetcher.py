@@ -3,23 +3,28 @@ import json
 import random
 import socket
 import requests
-from typing import Any, Dict
+from pathlib import Path
+from typing import Any, Dict, List
 from dotenv import load_dotenv
 
 # ── Force IPv4 for all outbound HTTP requests ─────────────────────────────────
-# Prevents "Network unreachable" / connection-reset errors in environments where
-# IPv6 routing is broken (Jenkins agents, Docker on Windows, WSL, etc.).
 _orig_getaddrinfo = socket.getaddrinfo
+
+
 def _ipv4_only(host, port, family=0, type=0, proto=0, flags=0):
     return _orig_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+
+
 socket.getaddrinfo = _ipv4_only
 # ─────────────────────────────────────────────────────────────────────────────
 
 USED_TOPICS_FILE = "used_topics.json"
+CATALOG_PATH = Path(__file__).parent.parent / "assets" / "youtube_bgm_catalog.json"
+YOUTUBE_LIBRARY_URL = "https://www.youtube.com/audiolibrary/music"
+DRIVE_DOWNLOAD_URL = "https://docs.google.com/uc?export=download&id={track_id}"
 
 
 def _load_used_music() -> set:
-    """Load the set of already-used Jamendo track IDs from the ledger."""
     if os.path.exists(USED_TOPICS_FILE):
         with open(USED_TOPICS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -28,7 +33,6 @@ def _load_used_music() -> set:
 
 
 def _save_used_music(track_id: str):
-    """Append a track ID to the never-repeat music ledger."""
     data = {}
     if os.path.exists(USED_TOPICS_FILE):
         with open(USED_TOPICS_FILE, "r", encoding="utf-8") as f:
@@ -40,153 +44,102 @@ def _save_used_music(track_id: str):
             json.dump(data, f, indent=2, ensure_ascii=False)
         print(f"[MusicTracker] Marked track {track_id} as used ({len(used)} total)")
 
+
+def _topic_keywords(topic: str) -> List[str]:
+    """Keywords to score YouTube Audio Library track names against the video topic."""
+    topic_lower = topic.lower()
+    keywords = set(w for w in topic_lower.replace(",", " ").split() if len(w) > 3)
+
+    if any(w in topic_lower for w in ["motivat", "success", "goal", "growth", "mindset",
+                                       "wealth", "money", "business", "achieve"]):
+        keywords.update(["hope", "dream", "inspire", "calm", "morning", "uplift"])
+    if any(w in topic_lower for w in ["brain", "psychology", "facts", "science", "history",
+                                       "secret", "hidden", "truth"]):
+        keywords.update(["meditation", "mysterious", "reflection", "thought", "mind"])
+    if any(w in topic_lower for w in ["space", "universe", "tech", "ai", "future"]):
+        keywords.update(["dream", "sky", "ambient", "ethereal", "space"])
+    if any(w in topic_lower for w in ["calm", "meditat", "mindful", "relax", "peaceful",
+                                       "ocean", "nature", "forest"]):
+        keywords.update(["calm", "peace", "meditation", "nature", "water", "gentle"])
+    if any(w in topic_lower for w in ["scary", "horror", "dark", "danger"]):
+        keywords.update(["dark", "tension", "mysterious"])
+
+    keywords.update(["calm", "ambient", "acoustic", "meditation", "piano", "peace"])
+    return list(keywords)
+
+
 class MusicFetcher:
     """
-    Downloads royalty-free background music from Jamendo's free music API.
-    Jamendo provides Creative Commons licensed music - completely free & safe for YouTube.
-    
-    Get your free Client ID at: https://developer.jamendo.com/
-    Registration is free and takes 2 minutes.
+    Downloads calm background music from the YouTube Audio Library
+    (studio.youtube.com → Audio library). Uses a bundled catalog of
+    copyright-safe tracks with Google Drive download IDs.
     """
-    
+
     def __init__(self):
         load_dotenv()
-        self.client_id = os.getenv("JAMENDO_CLIENT_ID")
-        if not self.client_id or self.client_id == "your_jamendo_client_id_here":
-            raise ValueError("JAMENDO_CLIENT_ID is missing in .env! Get a free key at https://developer.jamendo.com/")
-        allowed_ids_raw = os.getenv("JAMENDO_ALLOWED_TRACK_IDS", "")
-        self.allowed_track_ids = {track_id.strip() for track_id in allowed_ids_raw.split(",") if track_id.strip()}
+        catalog_path = os.getenv("YOUTUBE_BGM_CATALOG", str(CATALOG_PATH))
+        self.catalog_path = Path(catalog_path)
+        if not self.catalog_path.exists():
+            raise ValueError(
+                f"YouTube BGM catalog not found at {self.catalog_path}. "
+                "Expected assets/youtube_bgm_catalog.json in the repo."
+            )
+        with open(self.catalog_path, "r", encoding="utf-8") as f:
+            catalog = json.load(f)
+        self.tracks = catalog.get("tracks", [])
+        if not self.tracks:
+            raise ValueError("YouTube BGM catalog contains no tracks.")
 
-    def _map_topic_to_tags(self, topic: str) -> str:
-        """
-        Intelligently maps the video topic to Jamendo music tags.
-        Prioritises cinematic, high-production-value mood music.
-        """
-        topic_lower = topic.lower()
-        
-        # Motivational / self-improvement / morning topics
-        if any(w in topic_lower for w in ["motivat", "success", "goal", "hustle", "growth",
-                                           "habit", "discipline", "stoic", "wisdom", "mindset",
-                                           "billionaire", "routine", "intelligent", "best",
-                                           "dominate", "win", "achieve", "powerful"]):
-            return "cinematic,energetic"
-        # Money / business / finance topics
-        elif any(w in topic_lower for w in ["money", "income", "invest", "wealth", "rich",
-                                             "millionaire", "financial", "salary", "business",
-                                             "brand", "passive", "hustle", "side", "earn",
-                                             "profit", "budget", "negotiate"]):
-            return "cinematic,corporate"
-        # Science / tech / facts / brain topics
-        elif any(w in topic_lower for w in ["brain", "psychology", "facts", "history", "ancient",
-                                             "civiliz", "quantum", "physics", "discover", "experiment",
-                                             "secret", "hidden", "truth", "mind"]):
-            return "cinematic,mysterious"
-        # Space / AI / future / tech topics
-        elif any(w in topic_lower for w in ["space", "universe", "science", "tech", "ai",
-                                             "future", "robot", "technology", "digital"]):
-            return "cinematic,electronic"
-        # Scary / danger / dark topics
-        elif any(w in topic_lower for w in ["scary", "horror", "dark", "creepy", "danger",
-                                             "scariest", "terrifying", "nightmare"]):
-            return "cinematic,dark"
-        # Ocean / nature / travel topics
-        elif any(w in topic_lower for w in ["ocean", "sea", "nature", "travel", "adventure",
-                                             "explore", "deep", "forest", "mountain"]):
-            return "cinematic,ambient"
-        # Calm / wellness topics
-        elif any(w in topic_lower for w in ["calm", "meditat", "mindful", "relax", "peaceful"]):
-            return "cinematic,peaceful"
-        # Happy / comedy topics
-        elif any(w in topic_lower for w in ["happy", "funny", "comedy", "joy"]):
-            return "cinematic,happy"
-        # News / politics / war / world events
-        elif any(w in topic_lower for w in ["news", "war", "politic", "election", "crisis",
-                                             "breaking", "world", "conflict", "govern"]):
-            return "cinematic,dramatic"
-        else:
-            # Default: cinematic and uplifting
-            return "cinematic,uplifting"
+    def _score_track(self, track: dict, keywords: List[str]) -> int:
+        name = track.get("name", "").lower()
+        return sum(1 for kw in keywords if kw in name)
 
     def fetch_music(self, topic: str, output_file: str = "bg_music.mp3") -> Dict[str, Any]:
-        """
-        Downloads background music relevant to the video topic.
-        Saves it to output_file and returns a dictionary:
-        {"file_path": str, "track": dict}
-        """
-        tags = self._map_topic_to_tags(topic)
-        print(f"Downloading background music (tags: '{tags}')...")
+        print("Selecting background music from YouTube Audio Library...")
+        keywords = _topic_keywords(topic)
+        scored = [(self._score_track(t, keywords), t) for t in self.tracks]
+        scored.sort(key=lambda x: x[0], reverse=True)
 
-        url = "https://api.jamendo.com/v3.0/tracks/"
-        base_params = {
-            "client_id": self.client_id,
-            "format": "json",
-            "limit": 200,
-            "include": "musicinfo",
-            "audioformat": "mp31",
-            "order": "popularity_total",
-            "durationbetween": "60_300",
-            "ccnc": "0",
-            "ccsa": "0",
-            "ccnd": "0",
-        }
-
-        # Try progressively broader tag combinations so we never fail completely
-        tag_attempts = [tags, "cinematic", "pop", ""]
-        tracks = []
-        for attempt_tags in tag_attempts:
-            params = {**base_params, "tags": attempt_tags}
-            response = requests.get(url, params=params, timeout=10)
-            if response.status_code != 200:
-                continue
-            data = response.json()
-            tracks = [t for t in data.get("results", []) if t.get("audio")]
-            if tracks:
-                if attempt_tags != tags:
-                    print(f"  (broadened tags '{tags}' -> '{attempt_tags}')")
-                break
-
-        if not tracks:
-            raise Exception(f"Jamendo API returned no tracks for any tag combination. Last tried: '{attempt_tags}'")
-
-        if self.allowed_track_ids:
-            tracks = [t for t in tracks if str(t.get("id")) in self.allowed_track_ids]
-            if not tracks:
-                raise Exception(
-                    f"No Jamendo tracks matched JAMENDO_ALLOWED_TRACK_IDS for tags: {tags}. "
-                    f"Allowed IDs: {sorted(self.allowed_track_ids)}. "
-                    "Please update JAMENDO_ALLOWED_TRACK_IDS with valid Jamendo track IDs."
-                )
-
-        # Exclude tracks already used in previous videos (never-repeat)
         used_ids = _load_used_music()
-        fresh_tracks = [t for t in tracks if str(t.get("id")) not in used_ids]
-        if not fresh_tracks:
-            print(f"[Music] All {len(tracks)} tracks for '{tags}' already used — resetting pool")
-            fresh_tracks = tracks  # fallback: allow re-use rather than failing
+        pool_size = int(os.getenv("YOUTUBE_BGM_POOL_SIZE", "20"))
+        top_tracks = [t for _, t in scored[:pool_size]]
+        fresh = [t for t in top_tracks if str(t["id"]) not in used_ids]
+        if not fresh:
+            print("[Music] All top YouTube library picks already used — resetting pool")
+            fresh = top_tracks
 
-        # Pick a random track from top results for variety unless explicit IDs are enforced
-        candidate_tracks = fresh_tracks if self.allowed_track_ids else fresh_tracks[:10]
-        track = random.choice(candidate_tracks)
-        audio_url = track["audio"]
-        print(f"Found: '{track['name']}' by {track['artist_name']} (ID: {track['id']})")
-        print(f"Downloading...")
+        track = random.choice(fresh)
+        track_id = track["id"]
+        track_name = track.get("name", "Unknown Track")
+        print(f"Found: '{track_name}' (YouTube Audio Library, ID: {track_id})")
+        print("Downloading...")
 
-        audio_resp = requests.get(audio_url, stream=True, timeout=30)
+        download_url = DRIVE_DOWNLOAD_URL.format(track_id=track_id)
+        audio_resp = requests.get(download_url, stream=True, timeout=60)
         if audio_resp.status_code != 200:
-            raise Exception(f"Failed to download audio: {audio_resp.status_code}")
+            raise Exception(f"Failed to download track: HTTP {audio_resp.status_code}")
 
+        os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
         with open(output_file, "wb") as f:
             for chunk in audio_resp.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
 
-        # Mark this track as used so it's never picked again
-        _save_used_music(str(track["id"]))
-
+        _save_used_music(str(track_id))
         print(f"Background music saved to '{output_file}'!")
-        return {"file_path": output_file, "track": track}
+
+        return {
+            "file_path": output_file,
+            "track": {
+                "id": track_id,
+                "name": track_name,
+                "artist_name": "YouTube Audio Library",
+                "shareurl": YOUTUBE_LIBRARY_URL,
+                "source": "youtube_audio_library",
+            },
+        }
 
 
 if __name__ == "__main__":
     fetcher = MusicFetcher()
-    fetcher.fetch_music("motivational quotes for success")
+    fetcher.fetch_music("motivational quotes for success", output_file="temp/bgm_test.mp3")

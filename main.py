@@ -47,7 +47,7 @@ def run_pipeline():
     elif args.news:
         topic = NewsFetcher().get_breaking_topic(index=args.news_index)
     else:
-        topic = os.getenv("VIDEO_TOPIC", "interesting facts about space")
+        topic = os.getenv("VIDEO_TOPIC", "Review of the movie Inception (2010)")
     target_length = int(os.getenv("VIDEO_LENGTH_SECONDS", "85"))
     upload_enabled = os.getenv("UPLOAD_TO_YOUTUBE", "False").lower() in ("true", "1", "yes")
 
@@ -94,12 +94,12 @@ def run_pipeline():
     # 3. Download Background Media (8 unique clips)
     print(f"\n[3/7] Fetching {len(keywords)} Background Videos (full-HD, deduplicated)...")
     media_fetcher = MediaFetcher()
-    video_files = media_fetcher.fetch_background_videos(keywords, min_duration=5)
+    video_files = media_fetcher.fetch_background_video_paths(keywords, min_duration=5)
     if not video_files:
         raise RuntimeError("All Pexels video downloads failed. Cannot build video. Check PEXELS_API_KEY and API quota.")
 
-    # 4. Download Background Music from Jamendo
-    print(f"\n[4/7] Fetching Background Music from Jamendo...")
+    # 4. Download Background Music (YouTube Audio Library by default)
+    print(f"\n[4/7] Fetching Background Music...")
     selected_music = None
     try:
         music_fetcher = MusicFetcher()
@@ -140,7 +140,7 @@ def run_pipeline():
             # --- Tags: topic-specific only (avoid generic spam) ---
             topic_tags  = [w.strip().lower() for w in topic.replace("-", " ").split() if len(w) > 3][:4]
             scene_tags  = ["".join(k.split()).lower() for k in keywords[:3]]
-            niche_tags  = ["shorts", "youtubeshorts", "facts"]
+            niche_tags  = ["shorts", "youtubeshorts", "moviereview", "cinema"]
             all_hashtags = list(dict.fromkeys(
                 ["#" + t for t in (scene_tags + topic_tags + niche_tags)]
             ))[:8]
@@ -156,16 +156,12 @@ def run_pipeline():
             )
             if selected_music:
                 track_name = selected_music.get("name", "Unknown Track")
-                artist_name = selected_music.get("artist_name", "Unknown Artist")
-                track_url = selected_music.get("shareurl", "")
-                music_credit = f"\n\n🎵 Music: {track_name} — {artist_name} (via Jamendo, CC BY)"
-                if track_url:
-                    music_credit += f"\n{track_url}"
-                description += music_credit
+                track_url = selected_music.get("shareurl", "https://www.youtube.com/audiolibrary/music")
+                description += f"\n\n🎵 Music: {track_name} (YouTube Audio Library)\n{track_url}"
 
             # --- Tags array for YouTube API (plain words, no #) ---
             api_tags = [t.lstrip("#") for t in all_hashtags]
-            category_id = os.getenv("YOUTUBE_CATEGORY_ID", "27")
+            category_id = os.getenv("YOUTUBE_CATEGORY_ID", "1")
 
             print(f"  Title      : {video_title}")
             print(f"  Category   : {category_id}")

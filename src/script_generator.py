@@ -27,11 +27,11 @@ def _target_words(length_seconds: int) -> int:
 
 
 def _max_words(length_seconds: int) -> int:
-    return int(_target_words(length_seconds) * 1.03)
+    return int(_target_words(length_seconds) * 1.25)
 
 
 def _min_words(length_seconds: int) -> int:
-    return int(_target_words(length_seconds) * 0.88)
+    return int(_target_words(length_seconds) * 0.50)
 
 
 def _max_segments(length_seconds: int) -> int:
@@ -87,36 +87,39 @@ class ScriptGenerator:
         max_words = _max_words(length_seconds)
         min_segments = _min_segments(length_seconds)
         integrity = """
-## FACTUAL INTEGRITY (NON-NEGOTIABLE):
-- Only use plausible, general-knowledge claims — NO fake studies, universities, or "leaked documents"
-- Never say "Harvard discovered", "scientists hide this", or "they don't want you to know"
-- Prefer concrete specifics over vague hype ("octopus has three hearts" > "scientists are shocked")
-- If uncertain, use framing like "Here's something most people miss about {topic}..."
+## REVIEW INTEGRITY (NON-NEGOTIABLE):
+- Provide a genuine, engaging review of the movie.
+- Start with an interesting and catchy story plot that sticks with people.
+- End by explicitly naming the director, the main cast (hero and heroine), and giving a rating out of 10.
+- No major spoilers without a quick warning.
 """ if not strict else """
 ## STRICT REWRITE — previous draft violated rules:
-- Remove ALL fake authority claims and fabricated statistics
-- Keep the hook punchy but honest — curiosity without deception
-- First tts_segment MUST be 12 words or fewer
+- Keep the review punchy and engaging.
+- First tts_segment MUST be 12 words or fewer.
+- Do not just narrate the plot, provide an actual review and opinion.
 """
 
-        return f"""You are an elite YouTube scriptwriter. Write a {length_seconds}-SECOND voiceover script.
+        return f"""You are an elite YouTube movie reviewer. Write a {length_seconds}-SECOND movie review voiceover script.
 
 TOPIC: {topic}
 HARD REQUIREMENTS (automatic rejection if violated):
 - Between {int(word_count * 0.88)} and {max_words} words in `script` (target ~{word_count})
 - {min_segments} or more `tts_segments` (NOT 5, NOT 8 — need {min_segments}+)
-- EXACTLY 8 `keywords`
+- EXACTLY 8 `keywords` for background visuals
 {integrity}
 
 ## STRUCTURE for {length_seconds}s:
-1. HOOK (3–5s): 1 segment, max 12 words, emotion=shock/hook
-2. CURIOSITY STACK (5–30s): 5–7 segments building open loops
-3. DEEP DIVE (30–{length_seconds - 10}s): 10–14 segments — examples, facts, twists (LONGEST section)
-4. CTA (last 5–8s): 2 segments, emotion=cta/hope
+1. HOOK & PLOT (5–15s): 2-4 segments, start with an interesting and catchy story plot that hooks the viewer.
+2. DIRECTOR & CAST (15–25s): 2-4 segments, mention the director and the main cast (hero and heroine).
+3. RATING & CTA (last 5s): 1-2 segments, give a rating and a quick call to action.
+
+## KEYWORDS:
+- Generate EXACTLY 8 keywords that describe scenes, characters, or the poster of the movie for image search.
+- Do NOT use generic terms. Include the movie name or character name (e.g. "Inception Leo DiCaprio", "Inception dream city").
 
 ## TTS SEGMENTS:
 - One segment per spoken beat, 10–22 words each
-- Emotions: shock, urgency, hook, curiosity, tension, surprise, awe, inspiration, warmth, payoff, belonging, cta, hope, dramatic
+- Emotions: hook, dramatic, excited, disappointed, analytical, cta
 - Concatenated segment texts MUST equal the full `script`
 - NO ellipses (...)
 
@@ -125,8 +128,8 @@ HARD REQUIREMENTS (automatic rejection if violated):
     "title": "Hook title max 58 chars",
     "script": "Full {word_count}-word script as one string...",
     "tts_segments": [
-        {{"text": "segment 1 text here", "emotion": "shock"}},
-        {{"text": "segment 2 text here", "emotion": "curiosity"}}
+        {{"text": "segment 1 text here", "emotion": "hook"}},
+        {{"text": "segment 2 text here", "emotion": "analytical"}}
     ],
     "keywords": ["kw1", "kw2", "kw3", "kw4", "kw5", "kw6", "kw7", "kw8"]
 }}
@@ -152,7 +155,7 @@ REQUIRED: {min_words}–{max_words} words, {min_segments}+ tts_segments
 TOPIC: {topic}
 
 Rewrite from scratch. Target ~{word_count} words total — do NOT exceed {max_words} words.
-The DEEP DIVE section needs 10–14 segments with facts and examples, but stay within the word limit.
+The HIGHLIGHTS section needs enough segments with opinions and facts, but stay within the word limit.
 
 Previous script start (DO NOT reuse verbatim — EXPAND):
 {prev_script}...
@@ -334,8 +337,8 @@ Previous script (trim this down):
 if __name__ == "__main__":
     try:
         generator = ScriptGenerator()
-        topic = os.getenv("VIDEO_TOPIC", "creepiest ocean facts")
-        length = int(os.getenv("VIDEO_LENGTH_SECONDS", "85"))
+        topic = os.getenv("VIDEO_TOPIC", "Review of the movie Inception (2010)")
+        length = int(os.getenv("VIDEO_LENGTH_SECONDS", "30"))
         script, keywords, title, tts_segments = generator.generate_script(topic, length_seconds=length)
         print("\n--- GENERATED SCRIPT ---")
         print(script)
