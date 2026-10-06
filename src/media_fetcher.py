@@ -62,34 +62,36 @@ class MediaFetcher:
         return "pexels"
 
     def _search_pexels(self, query, min_duration=5):
-        # We repurposed this function name to use Bing Images without changing the surrounding logic too much
-        import re
-        url = "https://www.bing.com/images/search"
-        params = {"q": query + " movie"}
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        # Repurposed to use DuckDuckGo Search (ddgs) which yields highly accurate movie stills
         try:
-            response = requests.get(url, headers=headers, params=params, timeout=15)
-            if response.status_code != 200:
-                return None, None, False
-            
-            links = re.findall(r'murl&quot;:&quot;(.*?)&quot;', response.text)
-            valid_links = [l for l in links if l.lower().endswith(('.jpg', '.jpeg', '.png'))]
-            if not valid_links:
-                valid_links = links
+            from ddgs import DDGS
+            with DDGS() as ddgs:
+                results = list(ddgs.images(query, max_results=15))
+                
+                valid_links = []
+                for r in results:
+                    link = r.get('image', '')
+                    if link and link.lower().endswith(('.jpg', '.jpeg', '.png')):
+                        valid_links.append(link)
 
-            if not valid_links:
-                return None, None, False
+                if not valid_links:
+                    return None, None, False
 
-            # Pick a random image from top 5 to keep it relevant but varied
-            selected_link = random.choice(valid_links[:5])
-            # Hash or just use the link itself as id to prevent duplicates
-            pic_id = selected_link.split('/')[-1]
-            if pic_id in self._used_video_ids:
-                selected_link = valid_links[0]
-                pic_id = selected_link.split('/')[-1]
+                # Try to pick a relevant image, avoiding already used links
+                selected_link = None
+                for link in valid_links:
+                    pic_id = link.split('/')[-1]
+                    if pic_id not in self._used_video_ids:
+                        selected_link = link
+                        break
+                
+                if not selected_link:
+                    selected_link = valid_links[0]
+                    pic_id = selected_link.split('/')[-1]
 
-            return selected_link, pic_id, True
-        except Exception:
+                return selected_link, pic_id, True
+        except Exception as e:
+            print(f"  [!] DDGS Search Error for '{query}': {e}")
             return None, None, False
 
     def _archive_lucene_query(self, keyword: str) -> str:
