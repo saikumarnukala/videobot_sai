@@ -55,17 +55,32 @@ def run_pipeline():
     os.makedirs("temp", exist_ok=True)
     os.makedirs("output", exist_ok=True)
 
-    print(f"\n[1/7] Generating Script & 8 Cinematic Scenes for topic: '{topic}'...")
     script_gen = ScriptGenerator()
-    script_text, keywords, llm_title, tts_segments = script_gen.generate_script(
-        topic, length_seconds=target_length
-    )
+    media_fetcher = MediaFetcher()
+    
+    # 1. Validation Loop: Script Generation & Image Fetching
+    while True:
+        print(f"\n[1/7] Generating Script & 8 Cinematic Scenes for topic: '{topic}'...")
+        script_text, keywords, llm_title, tts_segments, data = script_gen.generate_script(
+            topic, length_seconds=target_length
+        )
 
-    print("\n--- SCRIPT ---")
-    print(script_text)
-    print(f"--- SCENES ({len(keywords)} keywords) ---")
-    print(keywords)
-    print("--------------\n")
+        print("\n--- SCRIPT ---")
+        print(script_text)
+        print(f"--- SCENES ({len(keywords)} keywords) ---")
+        print(keywords)
+        print(f"--- CAST: Hero: {data.get('hero')}, Heroine: {data.get('heroine')} ---")
+        print("--------------\n")
+
+        print(f"\n[1.5/7] Fetching & Validating {len(keywords)} Background Videos...")
+        video_files = media_fetcher.fetch_background_video_paths(keywords, min_duration=5)
+        
+        if not video_files or len(video_files) < len(keywords):
+            print(f"[!] Validation failed: Only fetched {len(video_files)} out of {len(keywords)} images. Retrying script generation...")
+            continue
+            
+        print("[✓] Images and cast validated successfully! Proceeding...")
+        break
 
     # 2. Audio Generation
     print(f"\n[2/7] Generating Voiceover...")
@@ -90,13 +105,6 @@ def run_pipeline():
             f"Voiceover too long ({audio_duration:.1f}s vs {target_length}s target). "
             "Script word count exceeded limit — regenerate with tighter prompt."
         )
-
-    # 3. Download Background Media (8 unique clips)
-    print(f"\n[3/7] Fetching {len(keywords)} Background Videos (full-HD, deduplicated)...")
-    media_fetcher = MediaFetcher()
-    video_files = media_fetcher.fetch_background_video_paths(keywords, min_duration=5)
-    if not video_files:
-        raise RuntimeError("All Pexels video downloads failed. Cannot build video. Check PEXELS_API_KEY and API quota.")
 
     # 4. Download Background Music (YouTube Audio Library by default)
     print(f"\n[4/7] Fetching Background Music...")

@@ -126,6 +126,9 @@ HARD REQUIREMENTS (automatic rejection if violated):
 ## OUTPUT (JSON ONLY — do NOT copy a short example; you need {min_segments}+ segments):
 {{
     "title": "Hook title max 58 chars",
+    "hero": "Name of the main hero/actor",
+    "heroine": "Name of the main heroine/actress",
+    "director": "Name of the director",
     "script": "Full {word_count}-word script as one string...",
     "tts_segments": [
         {{"text": "segment 1 text here", "emotion": "hook"}},
@@ -160,7 +163,7 @@ The HIGHLIGHTS section needs enough segments with opinions and facts, but stay w
 Previous script start (DO NOT reuse verbatim — EXPAND):
 {prev_script}...
 
-Return JSON only with title, script ({min_words}–{max_words} words), {min_segments}–{max_seg} tts_segments, 8 keywords."""
+Return JSON only with title, hero, heroine, director, script ({min_words}–{max_words} words), {min_segments}–{max_seg} tts_segments, 8 keywords."""
 
     def _build_trim_prompt(self, topic, length_seconds, data, errors):
         min_words = _min_words(length_seconds)
@@ -229,6 +232,13 @@ Previous script (trim this down):
             errors.append(
                 f"too long ({spoken_words} spoken words, need {min_w}–{max_w} for {length_seconds}s)"
             )
+
+        if not data.get("hero"):
+            errors.append("missing hero/actor name")
+        if not data.get("heroine"):
+            errors.append("missing heroine/actress name")
+        if not data.get("director"):
+            errors.append("missing director name")
 
         return errors
 
@@ -320,7 +330,7 @@ Previous script (trim this down):
                     f"[ScriptGen] OK — {len(tts_segments)} segments, "
                     f"{spoken} spoken words (~{length_seconds}s expected)"
                 )
-                return script, keywords, title, tts_segments
+                return script, keywords, title, tts_segments, data
 
             print(f"[ScriptGen] Rejected (attempt {attempt + 1}/{MAX_GENERATION_ATTEMPTS}): {errors}")
 
@@ -339,7 +349,7 @@ if __name__ == "__main__":
         generator = ScriptGenerator()
         topic = os.getenv("VIDEO_TOPIC", "Review of the movie Inception (2010)")
         length = int(os.getenv("VIDEO_LENGTH_SECONDS", "30"))
-        script, keywords, title, tts_segments = generator.generate_script(topic, length_seconds=length)
+        script, keywords, title, tts_segments, data = generator.generate_script(topic, length_seconds=length)
         print("\n--- GENERATED SCRIPT ---")
         print(script)
         print("\n--- TITLE ---")
