@@ -112,11 +112,11 @@ jobs:
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
           UPLOAD_TO_YOUTUBE: "true"
-          VIDEO_LENGTH_SECONDS: "85"
+          VIDEO_LENGTH_SECONDS: "30"
           RENDER_PRESET: "fast"
           YOUTUBE_PRIVACY: ${{ secrets.YOUTUBE_PRIVACY || 'public' }}
-          YOUTUBE_CATEGORY_ID: ${{ secrets.YOUTUBE_CATEGORY_ID || '27' }}
-          GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'llama-3.3-70b-versatile' }}
+          YOUTUBE_CATEGORY_ID: ${{ secrets.YOUTUBE_CATEGORY_ID || '1' }}
+          GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'qwen/qwen3.8-27b' }}
           DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
           DEEPGRAM_VOICE: ${{ secrets.DEEPGRAM_VOICE || '' }}
           DEEPGRAM_SPEED: "1.22"
