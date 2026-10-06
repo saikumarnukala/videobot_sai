@@ -61,47 +61,12 @@ jobs:
         id: topic_select
         run: |
           OVERRIDE_TOPIC="${{ github.event.inputs.topic }}"
-          OVERRIDE_SLOT="${{ github.event.inputs.slot }}"
 
           if [ -n "$OVERRIDE_TOPIC" ]; then
             echo "topic=$OVERRIDE_TOPIC" >> "$GITHUB_OUTPUT"
-            echo "use_news=false" >> "$GITHUB_OUTPUT"
-            echo "news_index=0" >> "$GITHUB_OUTPUT"
-          elif [ "$OVERRIDE_SLOT" = "news1" ]; then
-            echo "topic=" >> "$GITHUB_OUTPUT"
-            echo "use_news=true" >> "$GITHUB_OUTPUT"
-            echo "news_index=0" >> "$GITHUB_OUTPUT"
-          elif [ "$OVERRIDE_SLOT" = "news2" ]; then
-            echo "topic=" >> "$GITHUB_OUTPUT"
-            echo "use_news=true" >> "$GITHUB_OUTPUT"
-            echo "news_index=1" >> "$GITHUB_OUTPUT"
-          elif [ "$OVERRIDE_SLOT" = "news3" ]; then
-            echo "topic=" >> "$GITHUB_OUTPUT"
-            echo "use_news=true" >> "$GITHUB_OUTPUT"
-            echo "news_index=2" >> "$GITHUB_OUTPUT"
-          elif [ "$OVERRIDE_SLOT" = "news" ]; then
-            echo "topic=" >> "$GITHUB_OUTPUT"
-            echo "use_news=true" >> "$GITHUB_OUTPUT"
-            echo "news_index=0" >> "$GITHUB_OUTPUT"
-          elif [ -n "$OVERRIDE_SLOT" ]; then
-            TOPIC=$(python select_topic.py --slot "$OVERRIDE_SLOT" --run-number ${{ github.run_number }} --mark-used)
-            echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
-            echo "use_news=false" >> "$GITHUB_OUTPUT"
-            echo "news_index=0" >> "$GITHUB_OUTPUT"
           else
-            HOUR=$(date -u +%H)
-            if [ "$HOUR" = "02" ]; then
-              # Morning slot → news
-              echo "topic=" >> "$GITHUB_OUTPUT"
-              echo "use_news=true" >> "$GITHUB_OUTPUT"
-              echo "news_index=0" >> "$GITHUB_OUTPUT"
-            else
-              # Evening slot → topic
-              TOPIC=$(python select_topic.py --run-number ${{ github.run_number }} --mark-used)
-              echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
-              echo "use_news=false" >> "$GITHUB_OUTPUT"
-              echo "news_index=0" >> "$GITHUB_OUTPUT"
-            fi
+            TOPIC=$(python select_topic.py --run-number ${{ github.run_number }} --mark-used)
+            echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Generate video and upload to YouTube
@@ -125,11 +90,7 @@ jobs:
           BGM_VOLUME: "0.05"
           BGM_DUCK_RATIO: "0.55"
         run: |
-          if [ "${{ steps.topic_select.outputs.use_news }}" = "true" ]; then
-            python main.py --news --news-index ${{ steps.topic_select.outputs.news_index }}
-          else
-            python main.py --topic "${{ steps.topic_select.outputs.topic }}"
-          fi
+          python main.py --topic "${{ steps.topic_select.outputs.topic }}"
 
       - name: Commit used_topics.json
         if: success()
