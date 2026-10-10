@@ -20,6 +20,7 @@ test_*.json
 test.py
 temp/
 output/
+*.log
 
 # =========================
 # One-time setup scripts (already deleted)

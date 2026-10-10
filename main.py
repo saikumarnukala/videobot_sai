@@ -31,7 +31,7 @@ def _mark_topic_used(topic: str):
 
 
 def run_pipeline():
-    print(f"=== FACELESS VIDEO BOT v{VERSION} — PIPELINE STARTED ===")
+    print(f"=== FACELESS VIDEO BOT v{VERSION} - PIPELINE STARTED ===")
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--topic', type=str, help='Override the topic from .env')
@@ -79,7 +79,7 @@ def run_pipeline():
             print(f"[!] Validation failed: Only fetched {len(video_files)} out of {len(keywords)} images. Retrying script generation...")
             continue
             
-        print("[✓] Images and cast validated successfully! Proceeding...")
+        print("[OK] Images and cast validated successfully! Proceeding...")
         break
 
     # 2. Audio Generation

@@ -2,7 +2,13 @@ import os
 import json
 import sys
 import re
+import time
 from dotenv import load_dotenv
+
+try:
+    from src.wikipedia_fetcher import WikipediaFetcher
+except (ImportError, ModuleNotFoundError):
+    from wikipedia_fetcher import WikipediaFetcher
 
 BANNED_PHRASES = [
     "harvard discovered",
@@ -15,7 +21,7 @@ BANNED_PHRASES = [
     "billionaires don't want",
 ]
 
-MAX_HOOK_WORDS = 12
+MAX_HOOK_WORDS = 16
 REQUIRED_KEYWORDS = 8
 AURA2_MAX_SEGMENT_CHARS = 2000
 MAX_GENERATION_ATTEMPTS = 4
@@ -76,46 +82,65 @@ def _fit_script_to_duration(segments: list, length_seconds: int) -> tuple[str, l
 class ScriptGenerator:
     def __init__(self):
         load_dotenv()
-        self.groq_key   = os.getenv("GROQ_API_KEY")
-        self.groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        self.groq_key = os.getenv("GROQ_API_KEY")
+        self.groq_model = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+        self.wiki_fetcher = WikipediaFetcher()
 
         if not self.groq_key:
             raise ValueError("GROQ_API_KEY is missing in .env")
 
-    def _build_prompt(self, topic, length_seconds, strict=False):
+    def _build_prompt(self, topic, length_seconds, wiki_data=None, strict=False):
         word_count = _target_words(length_seconds)
         max_words = _max_words(length_seconds)
         min_segments = _min_segments(length_seconds)
+
+        wiki_facts = ""
+        if wiki_data and wiki_data.get("found"):
+            m_title = wiki_data.get("movie_name", "")
+            m_dir = wiki_data.get("director", "Unknown Director")
+            m_cast = wiki_data.get("cast", "Star Cast")
+            m_plot = wiki_data.get("plot", wiki_data.get("summary", ""))
+            wiki_facts = f"""
+## VERIFIED WIKIPEDIA MOVIE FACTS (GROUND TRUTH — USE THIS ACCURATE DATA):
+- Movie Title: {m_title}
+- Verified Director: {m_dir}
+- Verified Cast / Stars: {m_cast}
+- True Plot / Story: {m_plot}
+
+IMPORTANT: Write the script based directly on the verified Wikipedia plot and cast above. Do NOT hallucinate fake storylines or actors.
+"""
+
         integrity = """
 ## REVIEW INTEGRITY (NON-NEGOTIABLE):
 - Provide a genuine, engaging review of the movie.
 - Start with an interesting and catchy story plot that sticks with people.
-- End by explicitly naming the director, the main cast (hero and heroine), and giving a rating out of 10.
+- Explicitly name the director, the main cast (hero and heroine / key lead), and give a rating out of 10.
 - No major spoilers without a quick warning.
 """ if not strict else """
 ## STRICT REWRITE — previous draft violated rules:
-- Keep the review punchy and engaging.
-- First tts_segment MUST be 12 words or fewer.
+- Keep the review punchy, accurate, and engaging.
+- First tts_segment MUST be 14 words or fewer.
 - Do not just narrate the plot, provide an actual review and opinion.
 """
 
         return f"""You are an elite YouTube movie reviewer. Write a {length_seconds}-SECOND movie review voiceover script.
 
 TOPIC: {topic}
+{wiki_facts}
 HARD REQUIREMENTS (automatic rejection if violated):
 - Between {int(word_count * 0.88)} and {max_words} words in `script` (target ~{word_count})
-- {min_segments} or more `tts_segments` (NOT 5, NOT 8 — need {min_segments}+)
+- {min_segments} or more `tts_segments` (need {min_segments}+)
 - EXACTLY 8 `keywords` for background visuals
 {integrity}
 
 ## STRUCTURE for {length_seconds}s:
-1. HOOK & PLOT (5–15s): 2-4 segments, start with an interesting and catchy story plot that hooks the viewer.
-2. DIRECTOR & CAST (15–25s): 2-4 segments, mention the director and the main cast (hero and heroine).
+1. HOOK & PLOT (5–15s): 2-4 segments, start with an interesting and catchy story plot based on the Wikipedia plot that hooks the viewer.
+2. DIRECTOR & CAST (15–25s): 2-4 segments, mention the director and the main cast (hero and heroine / main lead).
 3. RATING & CTA (last 5s): 1-2 segments, give a rating and a quick call to action.
 
 ## KEYWORDS:
 - Generate EXACTLY 8 keywords that describe scenes, characters, or the poster of the movie for image search.
-- Do NOT use generic terms. Include the movie name or character name (e.g. "Inception Leo DiCaprio", "Inception dream city").
+- Include the movie name or character name (e.g. "Inception Leonardo DiCaprio", "Baahubali waterfall fight").
 
 ## TTS SEGMENTS:
 - One segment per spoken beat, 10–22 words each
@@ -123,11 +148,11 @@ HARD REQUIREMENTS (automatic rejection if violated):
 - Concatenated segment texts MUST equal the full `script`
 - NO ellipses (...)
 
-## OUTPUT (JSON ONLY — do NOT copy a short example; you need {min_segments}+ segments):
+## OUTPUT (JSON ONLY):
 {{
     "title": "Hook title max 58 chars",
     "hero": "Name of the main hero/actor",
-    "heroine": "Name of the main heroine/actress",
+    "heroine": "Name of the main heroine/actress or N/A",
     "director": "Name of the director",
     "script": "Full {word_count}-word script as one string...",
     "tts_segments": [
@@ -137,9 +162,9 @@ HARD REQUIREMENTS (automatic rejection if violated):
     "keywords": ["kw1", "kw2", "kw3", "kw4", "kw5", "kw6", "kw7", "kw8"]
 }}
 
-CRITICAL: Your `tts_segments` array MUST contain at least {min_segments} entries. Count before responding."""
+CRITICAL: Return valid JSON only with at least {min_segments} tts_segments."""
 
-    def _build_expand_prompt(self, topic, length_seconds, data, errors):
+    def _build_expand_prompt(self, topic, length_seconds, data, errors, wiki_data=None):
         word_count = _target_words(length_seconds)
         max_words = _max_words(length_seconds)
         min_words = _min_words(length_seconds)
@@ -149,6 +174,10 @@ CRITICAL: Your `tts_segments` array MUST contain at least {min_segments} entries
         current_segments = len(data.get("tts_segments") or [])
         prev_script = (data.get("script") or "")[:500]
 
+        wiki_facts = ""
+        if wiki_data and wiki_data.get("found"):
+            wiki_facts = f"Wikipedia Ground Truth: {wiki_data.get('plot', '')[:300]}..."
+
         return f"""REJECTED — your previous script did NOT meet length requirements for a {length_seconds}-second video.
 
 Errors: {errors}
@@ -156,6 +185,7 @@ Previous draft: {current_words} words, {current_segments} segments
 REQUIRED: {min_words}–{max_words} words, {min_segments}+ tts_segments
 
 TOPIC: {topic}
+{wiki_facts}
 
 Rewrite from scratch. Target ~{word_count} words total — do NOT exceed {max_words} words.
 The HIGHLIGHTS section needs enough segments with opinions and facts, but stay within the word limit.
@@ -165,7 +195,7 @@ Previous script start (DO NOT reuse verbatim — EXPAND):
 
 Return JSON only with title, hero, heroine, director, script ({min_words}–{max_words} words), {min_segments}–{max_seg} tts_segments, 8 keywords."""
 
-    def _build_trim_prompt(self, topic, length_seconds, data, errors):
+    def _build_trim_prompt(self, topic, length_seconds, data, errors, wiki_data=None):
         min_words = _min_words(length_seconds)
         max_words = _max_words(length_seconds)
         min_segments = _min_segments(length_seconds)
@@ -235,14 +265,12 @@ Previous script (trim this down):
 
         if not data.get("hero"):
             errors.append("missing hero/actor name")
-        if not data.get("heroine"):
-            errors.append("missing heroine/actress name")
         if not data.get("director"):
             errors.append("missing director name")
 
         return errors
 
-    def _parse_response(self, text):
+    def _parse_response(self, text, wiki_data=None):
         text = text.strip()
         if text.startswith("```json"):
             text = text[7:]
@@ -270,6 +298,52 @@ Previous script (trim this down):
         if tts_segments and not isinstance(tts_segments, list):
             tts_segments = []
 
+        # Auto-compute script if missing or list
+        script_val = data.get("script") or ""
+        if isinstance(script_val, list):
+            script_val = " ".join(str(x) for x in script_val).strip()
+        elif not script_val and tts_segments:
+            script_val = " ".join((s.get("text") or "").strip() for s in tts_segments if (s.get("text") or "").strip())
+        data["script"] = script_val
+
+        # Auto-fill metadata from Wikipedia if missing
+        if wiki_data and wiki_data.get("found"):
+            if not data.get("director") and wiki_data.get("director"):
+                data["director"] = wiki_data["director"]
+            if not data.get("hero") and wiki_data.get("hero_hint"):
+                data["hero"] = wiki_data["hero_hint"]
+            if not data.get("heroine"):
+                data["heroine"] = wiki_data.get("heroine_hint") or "N/A"
+
+        # Defaults for hero/heroine/director
+        if not data.get("hero"):
+            data["hero"] = "Lead Actor"
+        if not data.get("heroine"):
+            data["heroine"] = "N/A"
+        if not data.get("director"):
+            data["director"] = "Director"
+
+        # Ensure keywords list has exactly 8 items
+        kw = data.get("keywords") or []
+        if not isinstance(kw, list):
+            kw = []
+        base_name = wiki_data.get("movie_name", "Movie") if wiki_data else "Movie"
+        fallback_kws = [
+            f"{base_name} official poster",
+            f"{base_name} main character",
+            f"{base_name} iconic scene",
+            f"{base_name} climax action",
+            f"{base_name} cinematic still",
+            f"{base_name} movie dialogue",
+            f"{base_name} emotional moment",
+            f"{base_name} ending scene",
+        ]
+        while len(kw) < REQUIRED_KEYWORDS:
+            kw.append(fallback_kws[len(kw)])
+        if len(kw) > REQUIRED_KEYWORDS:
+            kw = kw[:REQUIRED_KEYWORDS]
+        data["keywords"] = kw
+
         return data["script"], data["keywords"], data.get("title", ""), tts_segments, data
 
     def _call_groq(self, prompt):
@@ -278,19 +352,54 @@ Previous script (trim this down):
             base_url="https://api.groq.com/openai/v1",
             api_key=self.groq_key,
         )
-        response = client.chat.completions.create(
-            model=self.groq_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.85,
-        )
-        return response.choices[0].message.content
+
+        models_to_try = [self.groq_model]
+        # Common models on Groq
+        for alt in ["qwen/qwen3.8-27b", "llama-3.3-70b-versatile"]:
+            if alt not in models_to_try:
+                models_to_try.append(alt)
+
+        last_err = None
+        for model in models_to_try:
+            for attempt in range(2):
+                try:
+                    response = client.chat.completions.create(
+                        model=model,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.85,
+                        max_tokens=900,
+                    )
+                    content = response.choices[0].message.content
+                    if content and content.strip():
+                        return content
+                except Exception as e:
+                    last_err = e
+                    err_str = str(e).lower()
+                    if "429" in err_str or "rate_limit" in err_str or "tokens" in err_str:
+                        print(f"[ScriptGen] Groq rate limit on {model}, backing off 3s...")
+                        time.sleep(3)
+                        continue
+                    break
+
+        raise RuntimeError(f"Groq completions failed: {last_err}")
 
     def generate_script(self, topic, length_seconds=45):
-        """Generates script using Groq — retries until length requirements are met."""
+        """Generates script using Groq grounded in Wikipedia movie facts."""
         print(f"Generating script via Groq for topic: '{topic}' (target {length_seconds}s)...")
         target = _target_words(length_seconds)
         min_seg = _min_segments(length_seconds)
         print(f"[ScriptGen] Target: ~{target} words, {min_seg}+ segments")
+
+        # 1. Fetch Wikipedia metadata
+        print(f"[ScriptGen] Grounding script with Wikipedia movie details...")
+        wiki_data = self.wiki_fetcher.fetch_movie_details(topic)
+        if wiki_data.get("found"):
+            print(
+                f"[ScriptGen] [OK] Wikipedia Match: '{wiki_data.get('page_title')}' | "
+                f"Director: '{wiki_data.get('director')}' | Cast: '{wiki_data.get('cast')[:60]}...'"
+            )
+        else:
+            print("[ScriptGen] [!] Movie not found on Wikipedia. Proceeding with general knowledge.")
 
         last_data = None
         last_result = None
@@ -298,17 +407,17 @@ Previous script (trim this down):
 
         for attempt in range(MAX_GENERATION_ATTEMPTS):
             if attempt == 0:
-                prompt = self._build_prompt(topic, length_seconds)
+                prompt = self._build_prompt(topic, length_seconds, wiki_data=wiki_data)
             elif any("too long" in e or "too many" in e for e in errors):
-                prompt = self._build_trim_prompt(topic, length_seconds, last_data, errors)
+                prompt = self._build_trim_prompt(topic, length_seconds, last_data, errors, wiki_data=wiki_data)
             elif any("too short" in e for e in errors):
-                prompt = self._build_expand_prompt(topic, length_seconds, last_data, errors)
+                prompt = self._build_expand_prompt(topic, length_seconds, last_data, errors, wiki_data=wiki_data)
             else:
-                prompt = self._build_prompt(topic, length_seconds, strict=True)
+                prompt = self._build_prompt(topic, length_seconds, wiki_data=wiki_data, strict=True)
 
             try:
                 raw = self._call_groq(prompt)
-                script, keywords, title, tts_segments, data = self._parse_response(raw)
+                script, keywords, title, tts_segments, data = self._parse_response(raw, wiki_data=wiki_data)
                 script, tts_segments = _fit_script_to_duration(tts_segments, length_seconds)
                 data["script"] = script
                 data["tts_segments"] = tts_segments
@@ -327,7 +436,7 @@ Previous script (trim this down):
             spoken = max(len(script.split()), _segment_word_count(tts_segments))
             if not errors:
                 print(
-                    f"[ScriptGen] OK — {len(tts_segments)} segments, "
+                    f"[ScriptGen] OK - {len(tts_segments)} segments, "
                     f"{spoken} spoken words (~{length_seconds}s expected)"
                 )
                 return script, keywords, title, tts_segments, data
@@ -355,6 +464,8 @@ if __name__ == "__main__":
         print("\n--- TITLE ---")
         print(title)
         print(f"\n--- STATS: {len(tts_segments)} segments, {len(script.split())} words ---")
+        print("\n--- CAST ---")
+        print(f"Hero: {data.get('hero')} | Heroine: {data.get('heroine')} | Director: {data.get('director')}")
         print("\n--- SCENES/KEYWORDS ---")
         print(keywords)
     except Exception as e:

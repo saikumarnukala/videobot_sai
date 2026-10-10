@@ -61,38 +61,23 @@ class MediaFetcher:
             return "archive" if index % 2 else "pexels"
         return "pexels"
 
-    def _search_pexels(self, query, min_duration=5):
-        # Repurposed to use DuckDuckGo Search (ddgs) which yields highly accurate movie stills
+    def _get_pexels_links(self, query):
+        """Fetch candidate image links using DuckDuckGo Search (ddgs)."""
+        blocked_domains = ("themoviedb.org", "tmdb.org")
         try:
             from ddgs import DDGS
-            with DDGS() as ddgs:
+            with DDGS(timeout=8) as ddgs:
                 results = list(ddgs.images(query, max_results=15))
-                
                 valid_links = []
                 for r in results:
-                    link = r.get('image', '')
-                    if link and link.lower().endswith(('.jpg', '.jpeg', '.png')):
-                        valid_links.append(link)
-
-                if not valid_links:
-                    return None, None, False
-
-                # Try to pick a relevant image, avoiding already used links
-                selected_link = None
-                for link in valid_links:
-                    pic_id = link.split('/')[-1]
-                    if pic_id not in self._used_video_ids:
-                        selected_link = link
-                        break
-                
-                if not selected_link:
-                    selected_link = valid_links[0]
-                    pic_id = selected_link.split('/')[-1]
-
-                return selected_link, pic_id, True
+                    link = r.get("image", "")
+                    if link and link.lower().endswith((".jpg", ".jpeg", ".png")):
+                        if not any(d in link.lower() for d in blocked_domains):
+                            valid_links.append(link)
+                return valid_links
         except Exception as e:
             print(f"  [!] DDGS Search Error for '{query}': {e}")
-            return None, None, False
+            return []
 
     def _archive_lucene_query(self, keyword: str) -> str:
         terms = [t for t in keyword.split() if len(t) > 2][:4]
@@ -155,7 +140,33 @@ class MediaFetcher:
         except Exception:
             return None, None, False
 
-    def _find_pexels_video(self, keyword, index, min_duration=5):
+    def _download_video(self, video_url: str, output_file: str) -> bool:
+        dl_headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        }
+        for attempt in range(2):
+            try:
+                vid_resp = requests.get(video_url, headers=dl_headers, stream=True, timeout=5)
+                vid_resp.raise_for_status()
+                with open(output_file, "wb") as f:
+                    for chunk in vid_resp.iter_content(chunk_size=65536):
+                        if chunk:
+                            f.write(chunk)
+                if os.path.exists(output_file) and os.path.getsize(output_file) >= 10240:
+                    print(f"  [OK] Downloaded to {output_file}")
+                    return True
+                if os.path.exists(output_file):
+                    os.remove(output_file)
+            except Exception:
+                if os.path.exists(output_file):
+                    try:
+                        os.remove(output_file)
+                    except Exception:
+                        pass
+        return False
+
+    def _find_and_download_pexels(self, keyword, index, output_file):
         words = keyword.split()
         candidates = [keyword]
         if len(words) >= 4:
@@ -167,13 +178,15 @@ class MediaFetcher:
         candidates.append(_GENERIC_FALLBACKS[index % len(_GENERIC_FALLBACKS)])
 
         for attempt in candidates:
-            url, vid_id, found = self._search_pexels(attempt, min_duration)
-            if found:
-                if attempt != keyword:
-                    print(f"  (broadened Pexels search '{keyword}' → '{attempt}')")
-                self._used_video_ids.add(vid_id)
-                return url
-        return None
+            links = self._get_pexels_links(attempt)
+            for link in links:
+                pic_id = link.split("/")[-1]
+                if pic_id in self._used_video_ids:
+                    continue
+                if self._download_video(link, output_file):
+                    self._used_video_ids.add(pic_id)
+                    return True
+        return False
 
     def _find_archive_video(self, keyword, index):
         words = keyword.split()
@@ -188,38 +201,9 @@ class MediaFetcher:
             url, archive_key, found = self._search_archive(attempt)
             if found:
                 if attempt != keyword:
-                    print(f"  (broadened Archive search '{keyword}' → '{attempt}')")
+                    print(f"  (broadened Archive search '{keyword}' -> '{attempt}')")
                 return url
         return None
-
-    def _find_video(self, keyword, index, min_duration=5):
-        source = self._source_for_slot(index)
-        if source == "archive":
-            return self._find_archive_video(keyword, index), "archive"
-        return self._find_pexels_video(keyword, index, min_duration), "pexels"
-
-    def _download_video(self, video_url: str, output_file: str) -> bool:
-        print(f"  Downloading video...")
-        for attempt in range(3):
-            try:
-                vid_resp = requests.get(video_url, stream=True, timeout=120)
-                vid_resp.raise_for_status()
-                with open(output_file, "wb") as f:
-                    for chunk in vid_resp.iter_content(chunk_size=65536):
-                        if chunk:
-                            f.write(chunk)
-                if os.path.getsize(output_file) < 10240:
-                    print(f"  [!] Downloaded file too small, skipping")
-                    os.remove(output_file)
-                    return False
-                print(f"  [OK] Downloaded to {output_file}")
-                return True
-            except Exception as e:
-                if attempt < 2:
-                    print(f"  [retry {attempt + 1}] Download error: {e}")
-                else:
-                    print(f"  [!] Failed after 3 attempts: {e}")
-        return False
 
     def fetch_background_videos(self, keywords: list, min_duration=5) -> list:
         """
@@ -227,6 +211,7 @@ class MediaFetcher:
         VIDEO_SOURCE: pexels (default), archive, or hybrid (alternating slots).
         Returns list of dicts: {"path": str, "source": "pexels"|"archive", "keyword": str}
         """
+        import shutil
         downloaded = []
         for i, query in enumerate(keywords):
             output_file = f"temp/temp_bg_{i}.jpg"
@@ -234,15 +219,23 @@ class MediaFetcher:
             label = "Archive.org" if source == "archive" else "Pexels"
             print(f"[{i + 1}/{len(keywords)}] Searching {label} for: '{query}'...")
 
-            video_url, resolved_source = self._find_video(query, i, min_duration)
-            if not video_url:
-                print(f"  All fallbacks failed for slot {i + 1}, skipping.")
-                continue
+            success = False
+            if source == "archive":
+                video_url = self._find_archive_video(query, i)
+                if video_url and self._download_video(video_url, output_file):
+                    success = True
+            else:
+                success = self._find_and_download_pexels(query, i, output_file)
 
-            if self._download_video(video_url, output_file):
+            if not success and downloaded:
+                print(f"  [Fallback] Reusing image from slot 1 for slot {i + 1}")
+                shutil.copyfile(downloaded[0]["path"], output_file)
+                success = True
+
+            if success and os.path.exists(output_file):
                 downloaded.append({
                     "path": output_file,
-                    "source": resolved_source,
+                    "source": source,
                     "keyword": query,
                 })
         return downloaded
