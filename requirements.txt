@@ -10,4 +10,3 @@ feedparser
 Pillow
 numpy
 pydub
-ddgs

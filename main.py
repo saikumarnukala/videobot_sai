@@ -73,7 +73,7 @@ def run_pipeline():
         print("--------------\n")
 
         print(f"\n[1.5/7] Fetching & Validating {len(keywords)} Background Videos...")
-        video_files = media_fetcher.fetch_background_video_paths(keywords, min_duration=5)
+        video_files = media_fetcher.fetch_background_video_paths(keywords, topic=topic, min_duration=5)
         
         if not video_files or len(video_files) < len(keywords):
             print(f"[!] Validation failed: Only fetched {len(video_files)} out of {len(keywords)} images. Retrying script generation...")
