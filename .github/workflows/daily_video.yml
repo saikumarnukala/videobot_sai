@@ -59,13 +59,13 @@ jobs:
 
       - name: Select topic for this run
         id: topic_select
+        env:
+          OVERRIDE_TOPIC: ${{ inputs.topic }}
         run: |
-          OVERRIDE_TOPIC="${{ github.event.inputs.topic }}"
-
           if [ -n "$OVERRIDE_TOPIC" ]; then
             echo "topic=$OVERRIDE_TOPIC" >> "$GITHUB_OUTPUT"
           else
-            TOPIC=$(python select_topic.py --run-number ${{ github.run_number }} --mark-used)
+            TOPIC=$(python select_topic.py --run-number ${{ github.run_number }})
             echo "topic=$TOPIC" >> "$GITHUB_OUTPUT"
           fi
 
@@ -76,6 +76,7 @@ jobs:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          SELECTED_TOPIC: ${{ steps.topic_select.outputs.topic }}
           UPLOAD_TO_YOUTUBE: "true"
           VIDEO_LENGTH_SECONDS: "30"
           RENDER_PRESET: "fast"
@@ -90,7 +91,7 @@ jobs:
           BGM_VOLUME: "0.05"
           BGM_DUCK_RATIO: "0.55"
         run: |
-          python main.py --topic "${{ steps.topic_select.outputs.topic }}"
+          python main.py --topic "$SELECTED_TOPIC"
 
       - name: Commit used_topics.json
         if: success()
@@ -102,6 +103,15 @@ jobs:
             git add used_topics.json
             git diff --cached --quiet || (git commit -m "chore: update used_topics.json [skip ci]" && git pull --rebase --autostash origin main && git push)
           fi
+
+      - name: Preserve rendered Short
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-short
+          path: output/final_short.mp4
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Clean up temp files
         if: always()

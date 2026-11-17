@@ -59,7 +59,7 @@ def run_pipeline():
     media_fetcher = MediaFetcher()
     
     # 1. Validation Loop: Script Generation & Image Fetching
-    while True:
+    for _ in range(3):
         print(f"\n[1/7] Generating Script & 8 Cinematic Scenes for topic: '{topic}'...")
         script_text, keywords, llm_title, tts_segments, data = script_gen.generate_script(
             topic, length_seconds=target_length
@@ -81,6 +81,8 @@ def run_pipeline():
             
         print("[OK] Images and cast validated successfully! Proceeding...")
         break
+    else:
+        raise RuntimeError("Could not find usable visuals after three attempts.")
 
     # 2. Audio Generation
     print(f"\n[2/7] Generating Voiceover...")
@@ -182,16 +184,19 @@ def run_pipeline():
                 tags=api_tags,
                 category_id=category_id,
             )
+            if not video_id:
+                raise RuntimeError("YouTube returned no video ID.")
             print(f"  Video ID   : {video_id}")
         except Exception as e:
-            print(f"YouTube Upload Failed! Check your quota or client_secrets.json/token.json: {e}")
+            raise RuntimeError("YouTube upload failed.") from e
     else:
         print("Upload is DISABLED via .env file. Skipping upload so you can preview it locally!")
 
     print(f"\n=== PIPELINE SUCCESS v{VERSION}: '{final_output}' ===")
 
-    # Mark topic used only after successful video render
-    _mark_topic_used(topic)
+    # Preview runs leave the topic available for publication.
+    if upload_enabled:
+        _mark_topic_used(topic)
 
     # 7. Cleanup temp folder
     print("\n[7/7] Cleaning up temporary processing files...")
